@@ -495,6 +495,12 @@
         const SELECTION_PADDING_PX = 3;
         const SELECTION_LINE_WIDTH_PX = 2;
 
+         // --- NEW Triangle Constants ---
+         const POINTER_TRIANGLE_LENGTH_PX = 18; // How far the tip extends from the base line
+        const POINTER_TRIANGLE_BASE_HALF_WIDTH_PX = 7; // Half the width of the triangle's base
+        const POINTER_TRIANGLE_BASE_OFFSET_PX = 4; // How far from the center the base line sits
+        // --- End NEW ---
+
         // ==== App State ====
         const state = {
             currentScreen: 'main-menu',
@@ -748,8 +754,6 @@
                 // --- Apply individual cone rotation ONLY for pointer cones ---
                 let coneRotationRad = 0;
                 if (cone.type === ConeType.POINTER) {
-                    // cone.rotation is the angle we want the POINTER to point.
-                    // The rectangle draws along the positive X axis by default after rotation.
                     coneRotationRad = cone.rotation * Math.PI / 180;
                 }
 
@@ -767,19 +771,20 @@
                     context.arc(0, 0, radius, 0, Math.PI * 2);
                     context.fill();
                     if (isSelected) {
-                         // Simple selection stroke for starting cone
                         context.strokeStyle = 'lime';
                         context.lineWidth = SELECTION_LINE_WIDTH_PX * zoom;
-                         context.beginPath();
-                         context.arc(0, 0, radius + SELECTION_PADDING_PX * zoom, 0, Math.PI * 2);
+                        context.beginPath();
+                        context.arc(0, 0, radius + SELECTION_PADDING_PX * zoom, 0, Math.PI * 2);
                         context.stroke();
                     }
                 } else if (cone.type === ConeType.POINTER) {
                     const radius = POINTER_CONE_RADIUS_PX * zoom;
-                    // Make the rectangle clearly extend
-                    const rectHeight = POINTER_CONE_RECT_HEIGHT_PX * zoom;
-                    const rectWidth = POINTER_CONE_RECT_WIDTH_PX * zoom * 1.5; // Make it longer
-                    const rectStartX = radius * 0.7; // Start it slightly out from center
+                    // --- Triangle Calculations ---
+                    const triLength = POINTER_TRIANGLE_LENGTH_PX * zoom;
+                    const triBaseHalfWidth = POINTER_TRIANGLE_BASE_HALF_WIDTH_PX * zoom;
+                    // Position the base of the triangle slightly offset from the center
+                    const triBaseX = POINTER_TRIANGLE_BASE_OFFSET_PX * zoom;
+                    const triTipX = triBaseX + triLength; // X coordinate of the tip
 
                     // 1. Draw the base circle
                     context.beginPath();
@@ -787,22 +792,22 @@
                     context.arc(0, 0, radius, 0, Math.PI * 2);
                     context.fill();
 
-                    // 2. Draw the direction indicator rectangle (on top of the circle)
-                    context.fillStyle = 'red'; // **** Use RED for high visibility ****
-                    context.fillRect(
-                        rectStartX,         // Start drawing slightly away from origin (0,0) along the new X-axis
-                        -rectHeight / 2,    // Center the rectangle vertically
-                        rectWidth,          // The length of the indicator
-                        rectHeight          // The height of the indicator
-                    );
+                    // 2. Draw the direction indicator TRIANGLE (on top of the circle)
+                    context.fillStyle = 'red'; // Keep the visible color
+                    context.beginPath();
+                    context.moveTo(triTipX, 0);                      // Move to the Tip (apex)
+                    context.lineTo(triBaseX, -triBaseHalfWidth);    // Line to Base Top point
+                    context.lineTo(triBaseX, triBaseHalfWidth);     // Line to Base Bottom point
+                    context.closePath();                            // Line back to Tip (closes the shape)
+                    context.fill();                                 // Fill the triangle path
 
                     // 3. Draw selection indicator if selected
                     if (isSelected) {
                         context.beginPath();
                         context.strokeStyle = 'lime';
                         context.lineWidth = SELECTION_LINE_WIDTH_PX * zoom;
-                        // Calculate radius needed to encompass the protruding rectangle
-                        const selectionRadius = Math.max(radius, rectStartX + rectWidth) + SELECTION_PADDING_PX * zoom;
+                        // Calculate radius needed to encompass the triangle tip
+                        const selectionRadius = Math.max(radius, triTipX) + SELECTION_PADDING_PX * zoom;
                         context.arc(0, 0, selectionRadius, 0, Math.PI * 2);
                         context.stroke();
                     }
@@ -813,11 +818,10 @@
                     context.arc(0, 0, radius, 0, Math.PI * 2);
                     context.fill();
                     if (isSelected) {
-                        // Simple selection stroke for single cone
                         context.strokeStyle = 'lime';
                         context.lineWidth = SELECTION_LINE_WIDTH_PX * zoom;
-                         context.beginPath();
-                         context.arc(0, 0, radius + SELECTION_PADDING_PX * zoom, 0, Math.PI * 2);
+                        context.beginPath();
+                        context.arc(0, 0, radius + SELECTION_PADDING_PX * zoom, 0, Math.PI * 2);
                         context.stroke();
                     }
                 }
