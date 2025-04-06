@@ -738,24 +738,27 @@
                  const screenPos = geoToScreen(
                     cone.latitude, cone.longitude,
                     refLocation.latitude, refLocation.longitude,
-                    offsetX, offsetY, zoom, rotation
+                    offsetX, offsetY, zoom, rotation // Pass world rotation here
                 );
 
-                const isSelected = (context === mappingCtx && index === state.selectedConeIndex); // Only show selection on mapping screen
+                const isSelected = (context === mappingCtx && index === state.selectedConeIndex); // Selection only on mapping screen
 
                 context.save(); // Save context state before drawing each cone
 
-                // Apply individual cone rotation ONLY for pointer cones
+                // --- Apply individual cone rotation ONLY for pointer cones ---
                 let coneRotationRad = 0;
                 if (cone.type === ConeType.POINTER) {
+                    // cone.rotation is the angle we want the POINTER to point.
+                    // The rectangle draws along the positive X axis by default after rotation.
                     coneRotationRad = cone.rotation * Math.PI / 180;
                 }
 
-                // Translate to cone position and apply its rotation (if any)
+                // Translate to the calculated screen position first
                 context.translate(screenPos.x, screenPos.y);
-                context.rotate(coneRotationRad); // Rotate based on individual cone's angle
+                // Then rotate the context for this specific cone (if it's a pointer)
+                context.rotate(coneRotationRad);
 
-                // --- Draw the cone shape relative to the new (0,0) origin ---
+                // --- Draw the cone shape relative to the new (0,0) origin, now rotated ---
 
                 if (cone.type === ConeType.STARTING) {
                     const radius = START_CONE_RADIUS_PX * zoom;
@@ -763,33 +766,43 @@
                     context.fillStyle = 'green';
                     context.arc(0, 0, radius, 0, Math.PI * 2);
                     context.fill();
-                     if (isSelected) {
+                    if (isSelected) {
+                         // Simple selection stroke for starting cone
                         context.strokeStyle = 'lime';
                         context.lineWidth = SELECTION_LINE_WIDTH_PX * zoom;
+                         context.beginPath();
+                         context.arc(0, 0, radius + SELECTION_PADDING_PX * zoom, 0, Math.PI * 2);
                         context.stroke();
                     }
                 } else if (cone.type === ConeType.POINTER) {
                     const radius = POINTER_CONE_RADIUS_PX * zoom;
-                    const rectWidth = POINTER_CONE_RECT_WIDTH_PX * zoom;
+                    // Make the rectangle clearly extend
                     const rectHeight = POINTER_CONE_RECT_HEIGHT_PX * zoom;
+                    const rectWidth = POINTER_CONE_RECT_WIDTH_PX * zoom * 1.5; // Make it longer
+                    const rectStartX = radius * 0.7; // Start it slightly out from center
 
-                    // Draw circle
+                    // 1. Draw the base circle
                     context.beginPath();
                     context.fillStyle = 'orange';
                     context.arc(0, 0, radius, 0, Math.PI * 2);
                     context.fill();
 
-                    // Draw rectangle pointer (pointing along positive X axis)
-                    context.fillStyle = '#e69500'; // Darker orange
-                    context.fillRect(0, -rectHeight / 2, rectWidth, rectHeight);
+                    // 2. Draw the direction indicator rectangle (on top of the circle)
+                    context.fillStyle = 'red'; // **** Use RED for high visibility ****
+                    context.fillRect(
+                        rectStartX,         // Start drawing slightly away from origin (0,0) along the new X-axis
+                        -rectHeight / 2,    // Center the rectangle vertically
+                        rectWidth,          // The length of the indicator
+                        rectHeight          // The height of the indicator
+                    );
 
-                    // Draw selection indicator
+                    // 3. Draw selection indicator if selected
                     if (isSelected) {
                         context.beginPath();
                         context.strokeStyle = 'lime';
                         context.lineWidth = SELECTION_LINE_WIDTH_PX * zoom;
-                        // Circle encompassing the pointer shape
-                        const selectionRadius = Math.max(radius, rectWidth / 2) + SELECTION_PADDING_PX * zoom;
+                        // Calculate radius needed to encompass the protruding rectangle
+                        const selectionRadius = Math.max(radius, rectStartX + rectWidth) + SELECTION_PADDING_PX * zoom;
                         context.arc(0, 0, selectionRadius, 0, Math.PI * 2);
                         context.stroke();
                     }
@@ -799,16 +812,20 @@
                     context.fillStyle = 'orange';
                     context.arc(0, 0, radius, 0, Math.PI * 2);
                     context.fill();
-                     if (isSelected) {
+                    if (isSelected) {
+                        // Simple selection stroke for single cone
                         context.strokeStyle = 'lime';
                         context.lineWidth = SELECTION_LINE_WIDTH_PX * zoom;
-                         context.stroke();
+                         context.beginPath();
+                         context.arc(0, 0, radius + SELECTION_PADDING_PX * zoom, 0, Math.PI * 2);
+                        context.stroke();
                     }
                 }
 
-                context.restore(); // Restore context state
+                context.restore(); // Restore context state (removes translate and rotate for next cone)
             });
         }
+        
 
 
         function drawMap() {
