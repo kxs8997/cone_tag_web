@@ -782,11 +782,12 @@
                     // --- Triangle Calculations ---
                     const triLength = POINTER_TRIANGLE_LENGTH_PX * zoom;
                     const triBaseHalfWidth = POINTER_TRIANGLE_BASE_HALF_WIDTH_PX * zoom;
-                    // Calculate the Y offset for the triangle
                     const triangleOffsetY = POINTER_TRIANGLE_SIDE_OFFSET_Y_PX * zoom;
+
                     // Define triangle points relative to (0, triangleOffsetY)
-                    const triBaseX = 0; // Let the base start aligned with the center (X=0)
-                    const triTipX = triBaseX + triLength; // X coordinate of the tip
+                    // *** REVERSED ORIENTATION ***
+                    const triTipX = 0;          // Tip is now at X=0 (pointing towards center)
+                    const triBaseX = triLength; // Base is further out along positive X
 
                     // 1. Draw the base circle (at 0,0)
                     context.beginPath();
@@ -794,14 +795,15 @@
                     context.arc(0, 0, baseRadius, 0, Math.PI * 2);
                     context.fill();
 
-                    // 2. Draw the direction indicator TRIANGLE (offset downwards)
+                    // 2. Draw the direction indicator TRIANGLE (offset downwards, pointing inwards)
                     context.fillStyle = 'red';
                     context.beginPath();
-                    // MoveTo/LineTo coordinates now have triangleOffsetY added to their Y component
-                    context.moveTo(triTipX, triangleOffsetY);                      // Tip (Offset Y)
-                    context.lineTo(triBaseX, triangleOffsetY - triBaseHalfWidth);   // Base Top (Offset Y)
-                    context.lineTo(triBaseX, triangleOffsetY + triBaseHalfWidth);   // Base Bottom (Offset Y)
-                    context.closePath();                                           // Back to Tip
+                    // Start at the tip (now at X=0)
+                    context.moveTo(triTipX, triangleOffsetY);
+                    // Line to the two base corners (now further out at X=triBaseX)
+                    context.lineTo(triBaseX, triangleOffsetY - triBaseHalfWidth);
+                    context.lineTo(triBaseX, triangleOffsetY + triBaseHalfWidth);
+                    context.closePath(); // Line back to the tip
                     context.fill();
 
                     // 3. Draw selection indicator if selected
@@ -810,9 +812,8 @@
                         context.strokeStyle = 'lime';
                         context.lineWidth = SELECTION_LINE_WIDTH_PX * zoom;
                         // Calculate radius needed to encompass both base and offset triangle
-                        // Max distance from origin (0,0) to any point.
-                        const max_x = Math.max(baseRadius, triTipX);
-                        const max_y = Math.max(baseRadius, triangleOffsetY + triBaseHalfWidth);
+                        const max_x = Math.max(baseRadius, triBaseX); // Furthest X point is the triangle base
+                        const max_y = Math.max(baseRadius, Math.abs(triangleOffsetY) + triBaseHalfWidth); // Furthest Y point (use absolute offset)
                         const selectionRadius = Math.sqrt(max_x * max_x + max_y * max_y) + SELECTION_PADDING_PX * zoom;
                         // Draw the encompassing circle centered at the base cone (0,0)
                         context.arc(0, 0, selectionRadius, 0, Math.PI * 2);
