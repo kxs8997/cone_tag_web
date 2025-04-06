@@ -496,9 +496,9 @@
         const SELECTION_LINE_WIDTH_PX = 2;
 
          // --- NEW Triangle Constants ---
-         const POINTER_TRIANGLE_LENGTH_PX = 18; // How far the tip extends from the base line
-        const POINTER_TRIANGLE_BASE_HALF_WIDTH_PX = 7; // Half the width of the triangle's base
-        const POINTER_TRIANGLE_BASE_OFFSET_PX = 4; // How far from the center the base line sits
+         const POINTER_TRIANGLE_LENGTH_PX = 20; // How far the tip extends from the base line
+        const POINTER_TRIANGLE_BASE_HALF_WIDTH_PX = 6; // Half the width of the triangle's base
+        const POINTER_TRIANGLE_SIDE_OFFSET_Y_PX = 10 // How far from the center the base line sits
         // --- End NEW ---
 
         // ==== App State ====
@@ -778,36 +778,43 @@
                         context.stroke();
                     }
                 } else if (cone.type === ConeType.POINTER) {
-                    const radius = POINTER_CONE_RADIUS_PX * zoom;
+                    const baseRadius = POINTER_CONE_RADIUS_PX * zoom;
                     // --- Triangle Calculations ---
                     const triLength = POINTER_TRIANGLE_LENGTH_PX * zoom;
                     const triBaseHalfWidth = POINTER_TRIANGLE_BASE_HALF_WIDTH_PX * zoom;
-                    // Position the base of the triangle slightly offset from the center
-                    const triBaseX = POINTER_TRIANGLE_BASE_OFFSET_PX * zoom;
+                    // Calculate the Y offset for the triangle
+                    const triangleOffsetY = POINTER_TRIANGLE_SIDE_OFFSET_Y_PX * zoom;
+                    // Define triangle points relative to (0, triangleOffsetY)
+                    const triBaseX = 0; // Let the base start aligned with the center (X=0)
                     const triTipX = triBaseX + triLength; // X coordinate of the tip
 
-                    // 1. Draw the base circle
+                    // 1. Draw the base circle (at 0,0)
                     context.beginPath();
                     context.fillStyle = 'orange';
-                    context.arc(0, 0, radius, 0, Math.PI * 2);
+                    context.arc(0, 0, baseRadius, 0, Math.PI * 2);
                     context.fill();
 
-                    // 2. Draw the direction indicator TRIANGLE (on top of the circle)
-                    context.fillStyle = 'red'; // Keep the visible color
+                    // 2. Draw the direction indicator TRIANGLE (offset downwards)
+                    context.fillStyle = 'red';
                     context.beginPath();
-                    context.moveTo(triTipX, 0);                      // Move to the Tip (apex)
-                    context.lineTo(triBaseX, -triBaseHalfWidth);    // Line to Base Top point
-                    context.lineTo(triBaseX, triBaseHalfWidth);     // Line to Base Bottom point
-                    context.closePath();                            // Line back to Tip (closes the shape)
-                    context.fill();                                 // Fill the triangle path
+                    // MoveTo/LineTo coordinates now have triangleOffsetY added to their Y component
+                    context.moveTo(triTipX, triangleOffsetY);                      // Tip (Offset Y)
+                    context.lineTo(triBaseX, triangleOffsetY - triBaseHalfWidth);   // Base Top (Offset Y)
+                    context.lineTo(triBaseX, triangleOffsetY + triBaseHalfWidth);   // Base Bottom (Offset Y)
+                    context.closePath();                                           // Back to Tip
+                    context.fill();
 
                     // 3. Draw selection indicator if selected
                     if (isSelected) {
                         context.beginPath();
                         context.strokeStyle = 'lime';
                         context.lineWidth = SELECTION_LINE_WIDTH_PX * zoom;
-                        // Calculate radius needed to encompass the triangle tip
-                        const selectionRadius = Math.max(radius, triTipX) + SELECTION_PADDING_PX * zoom;
+                        // Calculate radius needed to encompass both base and offset triangle
+                        // Max distance from origin (0,0) to any point.
+                        const max_x = Math.max(baseRadius, triTipX);
+                        const max_y = Math.max(baseRadius, triangleOffsetY + triBaseHalfWidth);
+                        const selectionRadius = Math.sqrt(max_x * max_x + max_y * max_y) + SELECTION_PADDING_PX * zoom;
+                        // Draw the encompassing circle centered at the base cone (0,0)
                         context.arc(0, 0, selectionRadius, 0, Math.PI * 2);
                         context.stroke();
                     }
