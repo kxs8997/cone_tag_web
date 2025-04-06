@@ -762,7 +762,7 @@
                 // Translate to the calculated screen position first
                 context.translate(screenPos.x, screenPos.y);
                 // Then rotate the context for this specific cone (if it's a pointer)
-                context.rotate(coneRotationRad);
+                context.rotate(coneRotationRad); // <<< THIS ROTATION APPLIES TO EVERYTHING BELOW
 
                 // --- Draw the cone shape relative to the new (0,0) origin, now rotated ---
 
@@ -787,45 +787,41 @@
                     const triangleOffsetY = POINTER_TRIANGLE_SIDE_OFFSET_Y_PX * zoom;
 
                     // Define triangle points relative to (0, triangleOffsetY)
-                    // *** REVERSED ORIENTATION ***
                     const triTipX = 0;          // Tip is now at X=0 (pointing towards center)
                     const triBaseX = triLength; // Base is further out along positive X
 
-                    // 1. Draw the base circle (at 0,0)
+                    // 1. Draw the base circle (at 0,0) - will be rotated by coneRotationRad
                     context.beginPath();
                     context.fillStyle = 'orange';
                     context.arc(0, 0, baseRadius, 0, Math.PI * 2);
                     context.fill();
-                    context.save();
-                    context.rotate(triangleRotationAngle);
 
-                    // 2. Draw the direction indicator TRIANGLE (offset downwards, pointing inwards)
+                    // --- REMOVED context.save() and context.rotate() here ---
+
+                    // 2. Draw the direction indicator TRIANGLE - will ALSO be rotated by coneRotationRad
                     context.fillStyle = 'red';
                     context.beginPath();
-                    // Start at the tip (now at X=0)
                     context.moveTo(triTipX, triangleOffsetY);
-                    // Line to the two base corners (now further out at X=triBaseX)
                     context.lineTo(triBaseX, triangleOffsetY - triBaseHalfWidth);
                     context.lineTo(triBaseX, triangleOffsetY + triBaseHalfWidth);
-                    context.closePath(); // Line back to the tip
+                    context.closePath();
                     context.fill();
-                    context.restore();
+
+                    // --- REMOVED context.restore() here ---
 
                     // 3. Draw selection indicator if selected
                     if (isSelected) {
                         context.beginPath();
                         context.strokeStyle = 'lime';
                         context.lineWidth = SELECTION_LINE_WIDTH_PX * zoom;
-                        // Calculate radius needed to encompass both base and offset triangle
-                        const max_x = Math.max(baseRadius, triBaseX); // Furthest X point is the triangle base
-                        const max_y = Math.max(baseRadius, Math.abs(triangleOffsetY) + triBaseHalfWidth); // Furthest Y point (use absolute offset)
+                        const max_x = Math.max(baseRadius, triBaseX);
+                        const max_y = Math.max(baseRadius, Math.abs(triangleOffsetY) + triBaseHalfWidth);
                         const selectionRadius = Math.sqrt(max_x * max_x + max_y * max_y) + SELECTION_PADDING_PX * zoom;
-                        // Draw the encompassing circle centered at the base cone (0,0)
                         context.arc(0, 0, selectionRadius, 0, Math.PI * 2);
                         context.stroke();
                     }
                 } else { // ConeType.SINGLE
-                    const radius = POINTER_CONE_RADIUS_PX * zoom; // Same size as pointer base
+                    const radius = POINTER_CONE_RADIUS_PX * zoom;
                     context.beginPath();
                     context.fillStyle = 'orange';
                     context.arc(0, 0, radius, 0, Math.PI * 2);
@@ -839,7 +835,7 @@
                     }
                 }
 
-                context.restore(); // Restore context state (removes translate and rotate for next cone)
+                context.restore(); // Restore context state (removes translate and the single outer rotate)
             });
         }
         
