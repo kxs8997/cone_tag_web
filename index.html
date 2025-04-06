@@ -922,39 +922,57 @@
         // ==== Cone Management Functions ====
 
         function tagCone() {
+            // 1. Check GPS status
             if (!state.currentLocation || !state.isGPSReady) {
+                 // Use a more user-friendly alert or status message if desired
                  alert("GPS location not available or accuracy too low.");
-                 return;
+                 return; // Stop execution if GPS is not ready
             }
 
-            let coneType = state.selectedConeType;
-            let coneRotation = 0;
+            // 2. Determine the type and rotation for the new cone
+            let coneType;       // Variable to hold the determined type
+            let coneRotation = 0; // Default rotation is 0
 
-            if (state.cones.length === 0) {
-                coneType = ConeType.STARTING; // First cone is always starting cone
-            } else if (coneType === ConeType.POINTER) {
-                 coneRotation = state.pointerConeRotation; // Use current slider value for new pointer
+            // Check if this is the first or second cone being placed
+            if (state.cones.length < 2) {
+                // If the cones array currently has 0 or 1 items, the next cone is STARTING
+                coneType = ConeType.STARTING;
+                // Rotation is irrelevant for STARTING cones, keep it 0
+            } else {
+                // If placing the third cone or later, use the user's selected type
+                coneType = state.selectedConeType; // Get type from UI state (Pointer or Single)
+                // If the selected type is POINTER, get the current rotation from the slider state
+                if (coneType === ConeType.POINTER) {
+                    coneRotation = state.pointerConeRotation;
+                }
             }
 
+            // 3. Create the new Cone object
             const newCone = new Cone(
-                state.currentLocation.latitude,
-                state.currentLocation.longitude,
-                coneType,
-                coneRotation
+                state.currentLocation.latitude,  // Current GPS Latitude
+                state.currentLocation.longitude, // Current GPS Longitude
+                coneType,                       // The type determined above
+                coneRotation                    // The rotation determined above
             );
 
+            // 4. Add the new cone to the state array
             state.cones.push(newCone);
 
-            // If it was a pointer cone, select it immediately
-            if (coneType === ConeType.POINTER) {
-                selectCone(state.cones.length - 1);
+            // 5. Handle selection state
+            if (newCone.type === ConeType.POINTER) {
+                // If the newly added cone is a Pointer, automatically select it
+                // This makes the rotation slider active for the new cone immediately
+                selectCone(state.cones.length - 1); // Select the last cone added
             } else {
-                 deselectCone(); // Deselect if adding a single cone
-            }
+                 // If the newly added cone is STARTING or SINGLE, deselect any previously selected cone
+                 // This prevents the rotation slider from showing for non-pointer cones
+                 deselectCone();
+             }
 
-            updateConeScreenPositions(); // Update screen coords for all cones
-            drawMap();
-            updateSaveButtonState(); // Enable save button if cones exist
+            // 6. Update visuals and UI state
+            updateConeScreenPositions(); // Recalculate screen coordinates for hit detection/drawing
+            drawMap();                   // Redraw the map to show the new cone
+            updateSaveButtonState();     // Enable the 'Save' button now that there's at least one cone
         }
 
         function deleteLastCone() {
