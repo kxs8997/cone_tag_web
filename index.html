@@ -300,6 +300,8 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+             flex-grow: 1; /* Take space */
+             margin: 0 10px; /* Add some margin */
         }
 
         /* Back Button */
@@ -419,7 +421,6 @@
 
             <div id="controls">
                 <div class="control-row">
-                     <!-- Note: Export is handled per-chart now -->
                     <button id="import-chart-button-saved" class="primary">Import Chart</button>
                     <button id="delete-all-charts-button" class="danger">Delete All Charts</button>
                 </div>
@@ -439,7 +440,6 @@
 
             <div id="chart-map-container">
                 <canvas id="chart-canvas"></canvas>
-                 <!-- No blue dot or selection indicator needed here -->
             </div>
 
             <div id="controls">
@@ -482,7 +482,7 @@
     <script>
         // ==== Enums and Constants ====
         const ConeType = {
-            STARTING: 'starting', // First cone placed
+            STARTING: 'starting', // First two cones placed
             POINTER: 'pointer',   // Cone with direction
             SINGLE: 'single'      // Standard cone marker
         };
@@ -490,18 +490,15 @@
         const METERS_PER_LATITUDE = 111111; // Approximate meters per degree latitude
         const START_CONE_RADIUS_PX = 8;     // Base radius in pixels at zoom 1
         const POINTER_CONE_RADIUS_PX = 8;
-        const POINTER_CONE_RECT_WIDTH_PX = 16; // Length of pointer indicator
-        const POINTER_CONE_RECT_HEIGHT_PX = 6; // Width of pointer indicator
+
+        // --- Triangle Constants ---
+        const POINTER_TRIANGLE_LENGTH_PX = 20; // How "long" the triangle is
+        const POINTER_TRIANGLE_BASE_HALF_WIDTH_PX = 6; // Half the width of the triangle's wide end
+        const POINTER_TRIANGLE_SIDE_OFFSET_Y_PX = 10; // How far DOWN (positive Y) to offset the triangle center line
+        // --- End Adjusted ---
+
         const SELECTION_PADDING_PX = 3;
         const SELECTION_LINE_WIDTH_PX = 2;
-
-         // --- NEW Triangle Constants ---
-         const POINTER_TRIANGLE_LENGTH_PX = 20; // How far the tip extends from the base line
-        const POINTER_TRIANGLE_BASE_HALF_WIDTH_PX = 6; // Half the width of the triangle's base
-        const POINTER_TRIANGLE_SIDE_OFFSET_Y_PX = 2 // How far from the center the base line sits
-        const triangleRotationAngle = 180 * Math.PI / 180; // 45 degrees rotation
-
-        // --- End NEW ---
 
         // ==== App State ====
         const state = {
@@ -525,6 +522,13 @@
             chartViewZoom: 1.0,
             chartViewRotation: 0,
             pointerConeRotation: 0, // Default/current rotation for NEW pointer cones
+
+            // --- State for Chart View Panning ---
+            chartViewOffsetX: 0,
+            chartViewOffsetY: 0,
+            isDraggingChartView: false,
+            lastChartViewInteractionX: 0,
+            lastChartViewInteractionY: 0,
         };
 
         // ==== DOM Elements ====
@@ -613,7 +617,7 @@
         }
 
         // Convert screen pixel coordinates (relative to canvas top-left) to geographic location
-        // This needs to account for current GPS center, pan offset, zoom, and world rotation
+        // Accounts for current GPS center, pan offset, zoom, and world rotation
         function screenToGeo(screenX, screenY) {
             if (!state.currentLocation) return null;
 
@@ -622,26 +626,26 @@
             const centerX = canvasWidth / 2;
             const centerY = canvasHeight / 2;
 
-            // 1. Reverse World Rotation: Find the point relative to center *before* rotation
-            const angleRad = -state.worldRotation * Math.PI / 180; // Reverse angle
+            // 1. Reverse World Rotation
+            const angleRad = -state.worldRotation * Math.PI / 180;
             const cosA = Math.cos(angleRad);
             const sinA = Math.sin(angleRad);
             const rotatedX = (screenX - centerX) * cosA - (screenY - centerY) * sinA + centerX;
             const rotatedY = (screenX - centerX) * sinA + (screenY - centerY) * cosA + centerY;
 
-            // 2. Reverse Pan Offset: Find position relative to the GPS center marker
+            // 2. Reverse Pan Offset
             const xFromCenter = rotatedX - centerX - state.offsetX;
             const yFromCenter = rotatedY - centerY - state.offsetY;
 
-            // 3. Reverse Zoom: Calculate distance in meters
+            // 3. Reverse Zoom
             const metersPerPixel = calculateMetersPerPixel();
             const metersX = xFromCenter * metersPerPixel;
-            const metersY = yFromCenter * metersPerPixel; // Positive Y on screen is typically South
+            const metersY = yFromCenter * metersPerPixel;
 
             // 4. Convert Meters to Lat/Lon Deltas
             const metersPerLon = metersPerDegreeLongitude(state.currentLocation.latitude);
             const deltaLon = metersX / metersPerLon;
-            const deltaLat = -metersY / METERS_PER_LATITUDE; // Negative because screen Y increases downwards
+            const deltaLat = -metersY / METERS_PER_LATITUDE;
 
             return {
                 latitude: state.currentLocation.latitude + deltaLat,
@@ -650,28 +654,29 @@
         }
 
         // Convert geographic location to screen coordinates (relative to canvas top-left)
-        // Needs reference location (usually current GPS), pan offset, zoom, world rotation
+        // Needs ref location, pan offset, zoom, world rotation
         function geoToScreen(coneLat, coneLon, refLat, refLon, currentOffsetX, currentOffsetY, currentZoom, currentRotation) {
-            const canvasWidth = mappingCanvas.width; // Assume both canvases are sized same way
+            // Use mappingCanvas size as reference, assuming chartCanvas is similar layout
+            const canvasWidth = mappingCanvas.width;
             const canvasHeight = mappingCanvas.height;
             const centerX = canvasWidth / 2;
             const centerY = canvasHeight / 2;
 
-            // 1. Calculate Meter Offsets from Reference Location
+            // 1. Calculate Meter Offsets
             const metersPerLon = metersPerDegreeLongitude(refLat);
             const metersX = (coneLon - refLon) * metersPerLon;
-            const metersY = -(coneLat - refLat) * METERS_PER_LATITUDE; // Negative for screen Y direction
+            const metersY = -(coneLat - refLat) * METERS_PER_LATITUDE;
 
-            // 2. Apply Zoom: Convert meters to pixels relative to center
+            // 2. Apply Zoom
             const metersPerPixel = calculateMetersPerPixel(currentZoom);
             const pixelsX = metersX / metersPerPixel;
             const pixelsY = metersY / metersPerPixel;
 
-            // 3. Apply Pan Offset: Position relative to canvas center + offset
+            // 3. Apply Pan Offset
             const initialX = centerX + currentOffsetX + pixelsX;
             const initialY = centerY + currentOffsetY + pixelsY;
 
-            // 4. Apply World Rotation: Rotate around the canvas center
+            // 4. Apply World Rotation
             const angleRad = currentRotation * Math.PI / 180;
             const cosA = Math.cos(angleRad);
             const sinA = Math.sin(angleRad);
@@ -684,14 +689,12 @@
 
         // Calculate map scale based on zoom
         function calculateMetersPerPixel(zoom = state.zoomScale) {
-            // Define a base scale, e.g., 1 meter = 10 pixels at zoom 1.0
-            const basePixelsPerMeter = 10;
+            const basePixelsPerMeter = 10; // 1 meter = 10 pixels at zoom 1.0
             return 1 / (basePixelsPerMeter * zoom);
         }
 
 
-        // Update screenX/screenY for all cones based on current state (GPS, pan, zoom, rotation)
-        // This is primarily for hit detection and potentially for moving cones.
+        // Update screenX/screenY for all cones based on current mapping state
         function updateConeScreenPositions() {
             if (!state.currentLocation) return;
 
@@ -706,35 +709,33 @@
             });
         }
 
-        // Find cone index at screen coordinates
+        // Find cone index at screen coordinates on mapping canvas
         function findConeAt(screenX, screenY) {
              if (!state.currentLocation) return null;
-             const hitRadius = Math.max(START_CONE_RADIUS_PX, POINTER_CONE_RADIUS_PX) * state.zoomScale + 5; // Generous hit radius
+             const hitRadius = Math.max(START_CONE_RADIUS_PX, POINTER_CONE_RADIUS_PX) * state.zoomScale + 5;
 
-             // Iterate backwards (last drawn cone is on top)
             for (let i = state.cones.length - 1; i >= 0; i--) {
                 const cone = state.cones[i];
-                // Need to calculate screen pos on the fly for hit test, as offsetX/Y might have changed
                  const coneScreenPos = geoToScreen(
                     cone.latitude, cone.longitude,
                     state.currentLocation.latitude, state.currentLocation.longitude,
                     state.offsetX, state.offsetY, state.zoomScale, state.worldRotation
                  );
 
-                 // Simple distance check is usually sufficient for selection
                 const dx = screenX - coneScreenPos.x;
                 const dy = screenY - coneScreenPos.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
                 if (dist <= hitRadius) {
-                    return i; // Return index of the found cone
+                    return i;
                 }
             }
-            return null; // No cone found
+            return null;
         }
 
         // ==== Drawing Functions ====
 
+        // Updated drawCones function with final pointer style
         function drawCones(context, conesToDraw, refLocation, offsetX, offsetY, zoom, rotation) {
             if (!refLocation) return;
 
@@ -787,6 +788,7 @@
                     const triangleOffsetY = POINTER_TRIANGLE_SIDE_OFFSET_Y_PX * zoom;
 
                     // Define triangle points relative to (0, triangleOffsetY)
+                    // *** REVERSED ORIENTATION ***
                     const triTipX = 0;          // Tip is now at X=0 (pointing towards center)
                     const triBaseX = triLength; // Base is further out along positive X
 
@@ -796,8 +798,6 @@
                     context.arc(0, 0, baseRadius, 0, Math.PI * 2);
                     context.fill();
 
-                    // --- REMOVED context.save() and context.rotate() here ---
-
                     // 2. Draw the direction indicator TRIANGLE - will ALSO be rotated by coneRotationRad
                     context.fillStyle = 'red';
                     context.beginPath();
@@ -806,8 +806,6 @@
                     context.lineTo(triBaseX, triangleOffsetY + triBaseHalfWidth);
                     context.closePath();
                     context.fill();
-
-                    // --- REMOVED context.restore() here ---
 
                     // 3. Draw selection indicator if selected
                     if (isSelected) {
@@ -838,7 +836,6 @@
                 context.restore(); // Restore context state (removes translate and the single outer rotate)
             });
         }
-        
 
 
         function drawMap() {
@@ -846,10 +843,7 @@
             const canvasHeight = mappingCanvas.height;
             mappingCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-            // Optional: Draw grid or background elements first
-
             if (state.currentLocation) {
-                // Draw cones relative to current GPS location, considering pan, zoom, and world rotation
                 drawCones(
                     mappingCtx,
                     state.cones,
@@ -857,19 +851,17 @@
                     state.offsetX,
                     state.offsetY,
                     state.zoomScale,
-                    state.worldRotation // Use the mapping screen's world rotation
+                    state.worldRotation
                 );
             }
-
-            // Update marker visibility based on GPS status
             currentLocationMarker.style.display = state.currentLocation ? 'block' : 'none';
         }
 
-
+        // Updated drawChartView to use chart offset state
         function drawChartView() {
             if (!state.currentViewingChart || state.currentViewingChart.coneData.length === 0) {
                 chartViewCtx.clearRect(0, 0, chartViewCanvas.width, chartViewCanvas.height);
-                return; // Nothing to draw
+                return;
             }
 
             const chart = state.currentViewingChart;
@@ -877,22 +869,19 @@
             const canvasHeight = chartViewCanvas.height;
             chartViewCtx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-            // Use the first cone as the reference point (center of the view initially)
             const referenceLocation = {
                 latitude: chart.coneData[0].latitude,
                 longitude: chart.coneData[0].longitude
             };
 
-            // Center the view on the first cone, apply chart-specific zoom and rotation
-            // For chart view, pan offset (offsetX/Y) is typically 0, centering on the first cone.
              drawCones(
                 chartViewCtx,
                 chart.coneData,
                 referenceLocation,
-                0, // No panning in chart view (usually)
-                0, // No panning in chart view (usually)
+                state.chartViewOffsetX, // Use chart view offset
+                state.chartViewOffsetY, // Use chart view offset
                 state.chartViewZoom,
-                state.chartViewRotation // Use chart view's rotation
+                state.chartViewRotation
             );
         }
 
@@ -912,36 +901,33 @@
 
              // Redraw relevant canvases after resize
             if (state.currentScreen === 'mapping') {
-                 updateConeScreenPositions(); // Recalculate positions based on new size
+                 updateConeScreenPositions();
                  drawMap();
-            } else if (state.currentScreen === 'chart-view') {
+            } else if (state.currentScreen === 'chartView') {
                  drawChartView();
             }
         }
 
         // ==== Cone Management Functions ====
 
+        // Updated tagCone to make first two cones starting type
         function tagCone() {
             // 1. Check GPS status
             if (!state.currentLocation || !state.isGPSReady) {
-                 // Use a more user-friendly alert or status message if desired
                  alert("GPS location not available or accuracy too low.");
-                 return; // Stop execution if GPS is not ready
+                 return;
             }
 
             // 2. Determine the type and rotation for the new cone
-            let coneType;       // Variable to hold the determined type
-            let coneRotation = 0; // Default rotation is 0
+            let coneType;
+            let coneRotation = 0;
 
             // Check if this is the first or second cone being placed
             if (state.cones.length < 2) {
-                // If the cones array currently has 0 or 1 items, the next cone is STARTING
                 coneType = ConeType.STARTING;
-                // Rotation is irrelevant for STARTING cones, keep it 0
             } else {
-                // If placing the third cone or later, use the user's selected type
-                coneType = state.selectedConeType; // Get type from UI state (Pointer or Single)
-                // If the selected type is POINTER, get the current rotation from the slider state
+                // For the 3rd cone onwards, use the user's selected type
+                coneType = state.selectedConeType;
                 if (coneType === ConeType.POINTER) {
                     coneRotation = state.pointerConeRotation;
                 }
@@ -949,10 +935,10 @@
 
             // 3. Create the new Cone object
             const newCone = new Cone(
-                state.currentLocation.latitude,  // Current GPS Latitude
-                state.currentLocation.longitude, // Current GPS Longitude
-                coneType,                       // The type determined above
-                coneRotation                    // The rotation determined above
+                state.currentLocation.latitude,
+                state.currentLocation.longitude,
+                coneType,
+                coneRotation
             );
 
             // 4. Add the new cone to the state array
@@ -960,36 +946,31 @@
 
             // 5. Handle selection state
             if (newCone.type === ConeType.POINTER) {
-                // If the newly added cone is a Pointer, automatically select it
-                // This makes the rotation slider active for the new cone immediately
-                selectCone(state.cones.length - 1); // Select the last cone added
+                selectCone(state.cones.length - 1);
             } else {
-                 // If the newly added cone is STARTING or SINGLE, deselect any previously selected cone
-                 // This prevents the rotation slider from showing for non-pointer cones
                  deselectCone();
              }
 
             // 6. Update visuals and UI state
-            updateConeScreenPositions(); // Recalculate screen coordinates for hit detection/drawing
-            drawMap();                   // Redraw the map to show the new cone
-            updateSaveButtonState();     // Enable the 'Save' button now that there's at least one cone
+            updateConeScreenPositions();
+            drawMap();
+            updateSaveButtonState();
         }
+
 
         function deleteLastCone() {
             if (state.cones.length > 0) {
                 const deletedConeIndex = state.cones.length - 1;
                 state.cones.pop();
 
-                // If the deleted cone was the selected one, deselect
                 if (state.selectedConeIndex === deletedConeIndex) {
-                    deselectCone(); // This also hides the rotation slider
+                    deselectCone();
                 } else if (state.selectedConeIndex > deletedConeIndex) {
-                    // Adjust selection index if needed (though pop only affects the last)
                      state.selectedConeIndex--;
                  }
 
                 drawMap();
-                updateSaveButtonState(); // Disable save button if no cones left
+                updateSaveButtonState();
             }
         }
 
@@ -1003,39 +984,33 @@
             const cone = state.cones[index];
 
             if (cone.type === ConeType.POINTER) {
-                // Update and show the rotation slider
-                state.pointerConeRotation = cone.rotation; // Sync state
+                state.pointerConeRotation = cone.rotation;
                 pointerRotationSlider.value = cone.rotation;
                 pointerRotationValue.textContent = `${Math.round(cone.rotation)}°`;
-                pointerRotationContainer.style.display = 'flex'; // Show the slider container
-                selectedConeIndicator.style.display = 'block'; // Show the indicator text
+                pointerRotationContainer.style.display = 'flex';
+                selectedConeIndicator.style.display = 'block';
             } else {
-                // Hide rotation controls if not a pointer cone
                 pointerRotationContainer.style.display = 'none';
                 selectedConeIndicator.style.display = 'none';
             }
 
-            drawMap(); // Redraw to show selection highlight
+            drawMap();
         }
 
         function deselectCone() {
             state.selectedConeIndex = null;
-            pointerRotationContainer.style.display = 'none'; // Hide slider
-            selectedConeIndicator.style.display = 'none'; // Hide indicator
-            drawMap(); // Redraw to remove selection highlight
+            pointerRotationContainer.style.display = 'none';
+            selectedConeIndicator.style.display = 'none';
+            drawMap();
         }
 
-         // Updates the rotation of the currently selected cone
          function updateSelectedConeRotation(rotation) {
              if (state.selectedConeIndex !== null && state.cones[state.selectedConeIndex].type === ConeType.POINTER) {
                  state.cones[state.selectedConeIndex].rotation = rotation;
-                 // state.pointerConeRotation = rotation; // Keep this synced for new cones
-                 // pointerRotationValue.textContent = `${Math.round(rotation)}°`; // Listener updates this
-                 drawMap(); // Redraw to show the change
+                 drawMap();
             }
          }
 
-         // Move the selected cone based on drag delta
          function moveSelectedCone(deltaX, deltaY) {
             if (state.selectedConeIndex === null) return;
 
@@ -1054,14 +1029,12 @@
             if (newGeo) {
                 cone.latitude = newGeo.latitude;
                 cone.longitude = newGeo.longitude;
-                // Update internal screen pos for immediate feedback before full redraw
                 cone.screenX = newScreenX;
                 cone.screenY = newScreenY;
-                 drawMap(); // Redraw to show moved cone
+                 drawMap();
             }
         }
 
-         // Update Save Button state based on whether cones exist
         function updateSaveButtonState() {
              saveButton.disabled = state.cones.length === 0;
          }
@@ -1072,30 +1045,25 @@
 
         function initGeolocation() {
             if ('geolocation' in navigator) {
-                // Clear any previous watch
                 if (watchId !== null) {
                     navigator.geolocation.clearWatch(watchId);
                 }
-
                  updateLocationStatus("WAIT", "Requesting GPS...");
-                 currentLocationMarker.style.display = 'none'; // Hide until first fix
-                 state.currentLocation = null; // Reset location on init
+                 currentLocationMarker.style.display = 'none';
+                 state.currentLocation = null;
                  state.isGPSReady = false;
                  btnTagCone.disabled = true;
 
-
-                // Get initial high-accuracy position
                 navigator.geolocation.getCurrentPosition(
                     handleLocationUpdate,
                     handleLocationError,
                     { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
                 );
 
-                // Start watching for continuous updates
                 watchId = navigator.geolocation.watchPosition(
                     handleLocationUpdate,
                     handleLocationError,
-                    { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 } // Update more frequently
+                    { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 }
                 );
             } else {
                 updateLocationStatus("BAD", "Geolocation not supported");
@@ -1119,7 +1087,7 @@
             state.currentLocation = {
                 latitude: position.coords.latitude,
                 longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy // Accuracy in meters
+                accuracy: position.coords.accuracy
             };
 
              const accuracyMeters = position.coords.accuracy;
@@ -1138,10 +1106,8 @@
                 updateLocationStatus("BAD", "ACC POOR", statusText);
                  btnTagCone.disabled = true;
             }
-
-            // Update cone screen positions if map is panned/zoomed
             updateConeScreenPositions();
-            drawMap(); // Redraw map with new center
+            drawMap();
         }
 
 
@@ -1158,19 +1124,12 @@
              state.isGPSReady = false;
              btnTagCone.disabled = true;
              currentLocationMarker.style.display = 'none';
-             drawMap(); // Redraw (clears cones if no location)
+             drawMap();
         }
 
         function updateLocationStatus(statusType, statusLabel, infoText = "Waiting for GPS...") {
-             accuracyStatus.textContent = statusLabel;
-             locationInfo.innerHTML = `${infoText} <span id="accuracy-status" class="status-pill status-${statusType.toLowerCase()}">${statusLabel}</span>`;
-             // Re-fetch the span element as innerHTML replaces it
-             // accuracyStatus = document.getElementById('accuracy-status'); // Not strictly needed if just updating text/class
-              const statusPill = locationInfo.querySelector('.status-pill');
-              if(statusPill) {
-                   statusPill.className = `status-pill status-${statusType.toLowerCase()}`;
-                   statusPill.textContent = statusLabel;
-              }
+             const statusPillHTML = `<span id="accuracy-status" class="status-pill status-${statusType.toLowerCase()}">${statusLabel}</span>`;
+             locationInfo.innerHTML = `${infoText} ${statusPillHTML}`;
         }
 
         // ==== Storage Functions ====
@@ -1184,20 +1143,22 @@
 
             const chartData = {
                 name: name,
-                // Deep copy cone data to avoid storing screenX/Y or modifying original objects later
                  coneData: state.cones.map(c => ({
-                    latitude: c.latitude,
-                    longitude: c.longitude,
-                    type: c.type,
-                    rotation: c.rotation,
-                    id: c.id // Keep ID for potential future use
+                    latitude: c.latitude, longitude: c.longitude,
+                    type: c.type, rotation: c.rotation, id: c.id
                 })),
-                worldRotation: state.worldRotation, // Save the world rotation at time of save
+                worldRotation: state.worldRotation,
                 createdAt: new Date().toISOString()
             };
 
-            loadSavedCharts(); // Load current list
-            state.savedCharts.push(chartData); // Add the new one
+            loadSavedCharts();
+            // Handle potential name collision before pushing
+            const existingIndex = state.savedCharts.findIndex(c => c.name === name);
+            if (existingIndex !== -1) {
+                 // Remove the existing chart if overwriting
+                 state.savedCharts.splice(existingIndex, 1);
+             }
+            state.savedCharts.push(chartData);
 
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedCharts));
@@ -1206,8 +1167,8 @@
             } catch (e) {
                 console.error("Error saving to localStorage:", e);
                 alert("Error saving chart. Storage might be full.");
-                // Remove the chart we optimistically added if save failed
-                 state.savedCharts.pop();
+                // Revert optimistic add/replace if save failed
+                 loadSavedCharts();
                  return false;
             }
         }
@@ -1216,7 +1177,6 @@
             try {
                 const storedCharts = localStorage.getItem(STORAGE_KEY);
                 if (storedCharts) {
-                    // Basic validation: Check if it's an array
                      const parsed = JSON.parse(storedCharts);
                      if (Array.isArray(parsed)) {
                          state.savedCharts = parsed;
@@ -1230,7 +1190,7 @@
                 }
             } catch (e) {
                 console.error("Error loading charts from localStorage:", e);
-                state.savedCharts = []; // Reset on error
+                state.savedCharts = [];
             }
              return state.savedCharts;
         }
@@ -1243,11 +1203,11 @@
              state.savedCharts = state.savedCharts.filter(chart => chart.name !== chartNameToDelete);
              try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedCharts));
-                updateChartsList(); // Refresh the list display
+                updateChartsList();
             } catch (e) {
                  console.error("Error saving updated charts list:", e);
                  alert("Error deleting chart from storage.");
-                 loadSavedCharts(); // Reload to revert optimistic deletion
+                 loadSavedCharts();
             }
          }
 
@@ -1261,12 +1221,12 @@
              }
              state.savedCharts = [];
              try {
-                 localStorage.removeItem(STORAGE_KEY); // More efficient than saving empty array
+                 localStorage.removeItem(STORAGE_KEY);
                  updateChartsList();
              } catch (e) {
                  console.error("Error deleting all charts:", e);
                  alert("Error clearing chart storage.");
-                 loadSavedCharts(); // Revert
+                 loadSavedCharts();
              }
          }
 
@@ -1276,33 +1236,28 @@
                  return;
              }
             try {
-                 // Use only essential data for export
                  const exportData = {
                      name: chart.name,
-                     coneData: chart.coneData.map(c => ({ // Ensure clean export
-                         latitude: c.latitude,
-                         longitude: c.longitude,
-                         type: c.type,
-                         rotation: c.rotation
+                     coneData: chart.coneData.map(c => ({
+                         latitude: c.latitude, longitude: c.longitude,
+                         type: c.type, rotation: c.rotation
                      })),
                      worldRotation: chart.worldRotation || 0,
                      createdAt: chart.createdAt
                  };
 
-                const chartJson = JSON.stringify(exportData, null, 2); // Pretty print JSON
+                const chartJson = JSON.stringify(exportData, null, 2);
                 const blob = new Blob([chartJson], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
 
                 const a = document.createElement('a');
                 a.href = url;
-                // Sanitize filename
                  const filename = chart.name.replace(/[^a-z0-9_ -]/gi, '_').replace(/\s+/g, '_');
                  a.download = `${filename || 'autocross_chart'}.json`;
-                document.body.appendChild(a); // Required for Firefox
+                document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
 
-                // Delay revokeObjectURL slightly
                 setTimeout(() => URL.revokeObjectURL(url), 100);
              } catch (error) {
                  console.error("Error exporting chart:", error);
@@ -1317,54 +1272,48 @@
                 try {
                     const importedData = JSON.parse(e.target.result);
 
-                    // **Basic Validation**
                     if (typeof importedData !== 'object' || importedData === null) throw new Error("Invalid file format (not an object).");
                     if (typeof importedData.name !== 'string' || !importedData.name.trim()) throw new Error("Chart name missing or invalid.");
                     if (!Array.isArray(importedData.coneData)) throw new Error("Invalid cone data format (not an array).");
                     if (importedData.coneData.length === 0) throw new Error("Chart contains no cones.");
 
-                    // Further validation for cone data structure (optional but recommended)
                     for(const cone of importedData.coneData) {
                          if (typeof cone.latitude !== 'number' || typeof cone.longitude !== 'number' || typeof cone.type !== 'string') {
                              throw new Error("Invalid data structure within coneData.");
                          }
-                         // Assign default rotation if missing
                          cone.rotation = typeof cone.rotation === 'number' ? cone.rotation : 0;
                     }
 
-                     // Check for name collision
                      loadSavedCharts();
                      const existingChart = state.savedCharts.find(c => c.name === importedData.name);
                      if (existingChart) {
                          if (!confirm(`A chart named "${importedData.name}" already exists. Overwrite it?`)) {
                              alert("Import cancelled.");
+                             importFileInput.value = ''; // Reset file input
                              return;
                          }
-                         // Remove existing chart before adding new one
                           state.savedCharts = state.savedCharts.filter(c => c.name !== importedData.name);
                      }
 
-
-                    // Add necessary fields if missing from older exports
                      const newChart = {
                          ...importedData,
                          worldRotation: importedData.worldRotation || 0,
-                         createdAt: importedData.createdAt || new Date().toISOString() // Add created date if missing
+                         createdAt: importedData.createdAt || new Date().toISOString()
                      };
 
                     state.savedCharts.push(newChart);
-
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedCharts));
 
                     alert(`Chart "${newChart.name}" imported successfully!`);
-                    updateChartsList(); // Refresh list in case user is on that screen
+                    if(state.currentScreen === 'savedCharts') {
+                         updateChartsList(); // Refresh list if user is viewing it
+                     }
 
                 } catch (error) {
                     console.error("Error importing chart:", error);
                     alert('Error importing chart: ' + error.message);
                 } finally {
-                    // Reset file input value so the same file can be selected again if needed
-                     importFileInput.value = '';
+                     importFileInput.value = ''; // Always reset file input
                  }
             };
 
@@ -1377,29 +1326,27 @@
         }
 
         function triggerImport() {
-             importFileInput.click(); // Open file selection dialog
+             importFileInput.click();
          }
 
 
         function updateChartsList() {
-            loadSavedCharts(); // Ensure state.savedCharts is up-to-date
+            loadSavedCharts();
 
             if (state.savedCharts.length === 0) {
                 noChartsMessage.style.display = 'block';
                 chartsList.style.display = 'none';
-                chartsList.innerHTML = ''; // Clear list
+                chartsList.innerHTML = '';
             } else {
                 noChartsMessage.style.display = 'none';
                 chartsList.style.display = 'block';
-                chartsList.innerHTML = ''; // Clear previous items
+                chartsList.innerHTML = '';
 
-                // Sort charts, e.g., by creation date descending
                 const sortedCharts = [...state.savedCharts].sort((a, b) => {
                      const dateA = a.createdAt ? new Date(a.createdAt) : 0;
                      const dateB = b.createdAt ? new Date(b.createdAt) : 0;
-                     return dateB - dateA; // Newest first
+                     return dateB - dateA;
                  });
-
 
                 sortedCharts.forEach(chart => {
                     const li = document.createElement('li');
@@ -1421,7 +1368,7 @@
                      deleteBtn.className = 'danger';
                      deleteBtn.textContent = 'Del';
                      deleteBtn.onclick = (e) => {
-                         e.stopPropagation(); // Prevent li click event when clicking button
+                         e.stopPropagation();
                          deleteChart(chart.name);
                      };
 
@@ -1443,9 +1390,8 @@
 
             chartName.textContent = chart.name;
 
-             // Set initial view state from chart or defaults
-            state.chartViewRotation = chart.worldRotation || 0; // Use saved rotation
-            state.chartViewZoom = 1.0; // Start zoom at 1x
+            state.chartViewRotation = chart.worldRotation || 0;
+            state.chartViewZoom = 1.0;
 
             chartRotationSlider.value = state.chartViewRotation;
             chartRotationValue.textContent = `${Math.round(state.chartViewRotation)}°`;
@@ -1463,19 +1409,16 @@
         }
 
         // ==== Navigation ====
+        // Updated navigateToScreen to reset chart view offset
         function navigateToScreen(screenId) {
-            // Hide all screens
             Object.values(screens).forEach(screen => screen.classList.remove('active'));
 
-            // Show the target screen
              if (screens[screenId]) {
                  screens[screenId].classList.add('active');
                  state.currentScreen = screenId;
 
-                // Screen-specific setup
                 switch(screenId) {
                     case 'mapping':
-                         // Reset map state for a new session
                          state.cones = [];
                          state.offsetX = 0;
                          state.offsetY = 0;
@@ -1486,24 +1429,27 @@
                          zoomValue.textContent = `${state.zoomScale.toFixed(1)}x`;
                          worldRotationSlider.value = state.worldRotation;
                          rotationValue.textContent = `${Math.round(state.worldRotation)}°`;
-                         deselectCone(); // Ensure rotation slider is hidden initially
-                         updateSaveButtonState(); // Disable save initially
-                        resizeCanvas(); // Ensure canvas fits container
-                        initGeolocation(); // Start GPS tracking
+                         deselectCone();
+                         updateSaveButtonState();
+                        resizeCanvas();
+                        initGeolocation();
                         break;
                     case 'savedCharts':
-                        stopGeolocation(); // Stop GPS when leaving mapping screen
-                        updateChartsList(); // Load and display saved charts
+                        stopGeolocation();
+                        updateChartsList();
                         break;
                     case 'chartView':
                          stopGeolocation();
-                         resizeCanvas(); // Ensure canvas fits
-                         drawChartView(); // Draw the selected chart
+                         // Reset chart view pan offset when loading a chart
+                         state.chartViewOffsetX = 0;
+                         state.chartViewOffsetY = 0;
+                         resizeCanvas();
+                         drawChartView();
                         break;
                     case 'mainMenu':
                          stopGeolocation();
-                         state.currentViewingChart = null; // Clear viewed chart
-                         state.cones = []; // Clear any leftover mapping cones
+                         state.currentViewingChart = null;
+                         state.cones = []; // Clear mapping cones when going home
                          break;
                  }
             } else {
@@ -1513,15 +1459,15 @@
 
         // ==== Event Handlers ====
 
-        // -- Canvas Interaction (Mapping Screen) --
-        function getCanvasCoords(event) {
-            const rect = mappingCanvas.getBoundingClientRect();
+        // -- Canvas Interaction Helpers --
+        // Updated getCanvasCoords to take target canvas
+        function getCanvasCoords(event, targetCanvas) {
+            const rect = targetCanvas.getBoundingClientRect();
              let clientX, clientY;
              if (event.touches && event.touches.length > 0) {
                  clientX = event.touches[0].clientX;
                  clientY = event.touches[0].clientY;
              } else if (event.changedTouches && event.changedTouches.length > 0) {
-                 // Use changedTouches for touchend
                  clientX = event.changedTouches[0].clientX;
                  clientY = event.changedTouches[0].clientY;
             } else {
@@ -1534,23 +1480,22 @@
             };
         }
 
+        // -- Mapping Canvas Interaction --
         function handlePointerDown(event) {
-            event.preventDefault(); // Prevent default touch actions like scrolling
-            const coords = getCanvasCoords(event);
+            event.preventDefault();
+            const coords = getCanvasCoords(event, mappingCanvas); // Pass mappingCanvas
             state.lastInteractionX = coords.x;
             state.lastInteractionY = coords.y;
 
             const tappedConeIndex = findConeAt(coords.x, coords.y);
 
             if (tappedConeIndex !== null) {
-                // Start dragging the selected cone
-                 selectCone(tappedConeIndex); // Select the cone
+                 selectCone(tappedConeIndex);
                  state.isDraggingCone = true;
                  state.isDraggingMap = false;
                  mappingCanvas.style.cursor = 'grabbing';
             } else {
-                // Start dragging the map
-                 deselectCone(); // Deselect any cone if clicking empty space
+                 deselectCone();
                  state.isDraggingMap = true;
                  state.isDraggingCone = false;
                  mappingCanvas.style.cursor = 'grabbing';
@@ -1561,19 +1506,16 @@
             if (!state.isDraggingMap && !state.isDraggingCone) return;
             event.preventDefault();
 
-            const coords = getCanvasCoords(event);
+            const coords = getCanvasCoords(event, mappingCanvas); // Pass mappingCanvas
             const deltaX = coords.x - state.lastInteractionX;
             const deltaY = coords.y - state.lastInteractionY;
 
             if (state.isDraggingMap) {
                 state.offsetX += deltaX;
                 state.offsetY += deltaY;
-                 // No need to update cone screen positions constantly during drag
-                 drawMap(); // Redraw map with new offset
+                 drawMap();
             } else if (state.isDraggingCone) {
-                 // Move the selected cone
                  moveSelectedCone(deltaX, deltaY);
-                 // moveSelectedCone calls drawMap internally
             }
 
             state.lastInteractionX = coords.x;
@@ -1583,14 +1525,45 @@
         function handlePointerUp(event) {
              if (state.isDraggingMap || state.isDraggingCone) {
                 event.preventDefault();
-                 // If just finished dragging, update final screen positions
-                 // updateConeScreenPositions(); // Good idea after a drag ends
-                 // drawMap(); // Ensure final state is drawn
              }
              state.isDraggingMap = false;
              state.isDraggingCone = false;
-             mappingCanvas.style.cursor = 'grab'; // Reset cursor
+             mappingCanvas.style.cursor = 'grab';
          }
+
+        // -- Chart View Canvas Interaction --
+        function handleChartViewPointerDown(event) {
+            event.preventDefault();
+            const coords = getCanvasCoords(event, chartViewCanvas); // Use chart canvas
+            state.isDraggingChartView = true;
+            state.lastChartViewInteractionX = coords.x;
+            state.lastChartViewInteractionY = coords.y;
+            chartViewCanvas.style.cursor = 'grabbing';
+        }
+
+        function handleChartViewPointerMove(event) {
+            if (!state.isDraggingChartView) return;
+            event.preventDefault();
+            const coords = getCanvasCoords(event, chartViewCanvas); // Use chart canvas
+            const deltaX = coords.x - state.lastChartViewInteractionX;
+            const deltaY = coords.y - state.lastChartViewInteractionY;
+
+            state.chartViewOffsetX += deltaX;
+            state.chartViewOffsetY += deltaY;
+
+            state.lastChartViewInteractionX = coords.x;
+            state.lastChartViewInteractionY = coords.y;
+
+            drawChartView();
+        }
+
+        function handleChartViewPointerUp(event) {
+            if (state.isDraggingChartView) {
+                event.preventDefault();
+            }
+            state.isDraggingChartView = false;
+            chartViewCanvas.style.cursor = 'grab';
+        }
 
 
         // -- Button Clicks --
@@ -1610,23 +1583,18 @@
             state.selectedConeType = ConeType.SINGLE;
             btnSingleCone.classList.add('active');
             btnPointerCone.classList.remove('active');
-            // When switching to single cone, deselect any currently selected cone
-            // as the rotation slider doesn't apply to single cones.
-             // deselectCone(); // Let user keep selection if they want? Maybe not needed.
         });
 
         btnTagCone.addEventListener('click', tagCone);
         btnDeleteLastCone.addEventListener('click', deleteLastCone);
         saveButton.addEventListener('click', () => {
              if (state.cones.length > 0) {
-                 chartNameInput.value = generateChartName(); // Pre-fill name
-                 modal.style.display = 'flex'; // Show save modal
+                 chartNameInput.value = generateChartName();
+                 modal.style.display = 'flex';
              }
          });
 
          deleteAllChartsButton.addEventListener('click', deleteAllCharts);
-
-         // Import buttons
          importChartButtonMain.addEventListener('click', triggerImport);
          importChartButtonSaved.addEventListener('click', triggerImport);
          importFileInput.addEventListener('change', (event) => {
@@ -1634,8 +1602,6 @@
                  importChartFromFile(event.target.files[0]);
              }
          });
-
-         // Export button (in chart view)
          exportCurrentChartButton.addEventListener('click', () => {
              exportChart(state.currentViewingChart);
          });
@@ -1644,23 +1610,20 @@
         accuracyThresholdSlider.addEventListener('input', () => {
             state.gpsAccuracyThreshold = parseFloat(accuracyThresholdSlider.value);
             accuracyThresholdValue.textContent = `${state.gpsAccuracyThreshold.toFixed(1)} m`;
-            // Re-evaluate GPS readiness with the new threshold
             if (state.currentLocation) {
-                 handleLocationUpdate({ coords: state.currentLocation }); // Fake update to re-check accuracy
+                 handleLocationUpdate({ coords: state.currentLocation }); // Re-evaluate accuracy
              }
         });
 
         zoomSlider.addEventListener('input', () => {
             state.zoomScale = parseFloat(zoomSlider.value);
             zoomValue.textContent = `${state.zoomScale.toFixed(1)}x`;
-             // updateConeScreenPositions(); // Update positions based on new zoom for hit detection
             drawMap();
         });
 
         worldRotationSlider.addEventListener('input', () => {
             state.worldRotation = parseFloat(worldRotationSlider.value);
             rotationValue.textContent = `${Math.round(state.worldRotation)}°`;
-            // updateConeScreenPositions(); // Update positions based on new rotation
             drawMap();
         });
 
@@ -1671,7 +1634,6 @@
              updateSelectedConeRotation(rotation); // Update the currently selected cone
          });
 
-        // Chart View Sliders
         chartZoomSlider.addEventListener('input', () => {
             state.chartViewZoom = parseFloat(chartZoomSlider.value);
             chartZoomValue.textContent = `${state.chartViewZoom.toFixed(1)}x`;
@@ -1691,22 +1653,15 @@
                 alert('Please enter a valid chart name.');
                 return;
             }
-             // Check for name collision before saving
-             loadSavedCharts();
+             loadSavedCharts(); // Ensure we check against the latest list
              const existing = state.savedCharts.find(c => c.name === name);
              if (existing) {
                  if (!confirm(`A chart named "${name}" already exists. Overwrite it?`)) {
-                     return; // Don't save, leave modal open
+                     return;
                  }
-                 // Remove existing before saving new one
-                  state.savedCharts = state.savedCharts.filter(c => c.name !== name);
              }
-
-
-            if (saveCurrentChart(name)) {
-                 modal.style.display = 'none'; // Hide modal on success
-                 // Optionally navigate back or stay
-                 // navigateToScreen('mainMenu');
+            if (saveCurrentChart(name)) { // saveCurrentChart now handles replacing
+                 modal.style.display = 'none';
              }
         });
 
@@ -1717,25 +1672,34 @@
 
         // ==== Initialization ====
         function initApp() {
-             // Set cursor style
+             // Set cursor styles
              mappingCanvas.style.cursor = 'grab';
+             chartViewCanvas.style.cursor = 'grab';
 
-            // Attach canvas listeners
+            // Attach Mapping Canvas listeners
             mappingCanvas.addEventListener('mousedown', handlePointerDown);
             mappingCanvas.addEventListener('mousemove', handlePointerMove);
             mappingCanvas.addEventListener('mouseup', handlePointerUp);
-            mappingCanvas.addEventListener('mouseleave', handlePointerUp); // End drag if mouse leaves canvas
-
-            // Use passive: false ONLY if preventDefault is called inside handler
+            mappingCanvas.addEventListener('mouseleave', handlePointerUp);
             mappingCanvas.addEventListener('touchstart', handlePointerDown, { passive: false });
             mappingCanvas.addEventListener('touchmove', handlePointerMove, { passive: false });
             mappingCanvas.addEventListener('touchend', handlePointerUp, { passive: false });
-            mappingCanvas.addEventListener('touchcancel', handlePointerUp, { passive: false }); // Treat cancel like end
+            mappingCanvas.addEventListener('touchcancel', handlePointerUp, { passive: false });
+
+            // Attach Chart View Canvas listeners
+            chartViewCanvas.addEventListener('mousedown', handleChartViewPointerDown);
+            chartViewCanvas.addEventListener('mousemove', handleChartViewPointerMove);
+            chartViewCanvas.addEventListener('mouseup', handleChartViewPointerUp);
+            chartViewCanvas.addEventListener('mouseleave', handleChartViewPointerUp);
+            chartViewCanvas.addEventListener('touchstart', handleChartViewPointerDown, { passive: false });
+            chartViewCanvas.addEventListener('touchmove', handleChartViewPointerMove, { passive: false });
+            chartViewCanvas.addEventListener('touchend', handleChartViewPointerUp, { passive: false });
+            chartViewCanvas.addEventListener('touchcancel', handleChartViewPointerUp, { passive: false });
 
             // Initial setup
-            loadSavedCharts(); // Load charts on app start
-            resizeCanvas(); // Size canvases correctly
-            navigateToScreen('mainMenu'); // Start at the main menu
+            loadSavedCharts();
+            resizeCanvas();
+            navigateToScreen('mainMenu'); // Start at main menu
 
             // Add listener for window resize
             window.addEventListener('resize', resizeCanvas);
