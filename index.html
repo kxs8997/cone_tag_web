@@ -499,6 +499,8 @@
          const POINTER_TRIANGLE_LENGTH_PX = 20; // How far the tip extends from the base line
         const POINTER_TRIANGLE_BASE_HALF_WIDTH_PX = 6; // Half the width of the triangle's base
         const POINTER_TRIANGLE_SIDE_OFFSET_Y_PX = 20 // How far from the center the base line sits
+        const triangleRotationAngle = 45 * Math.PI / 180; // 45 degrees rotation
+
         // --- End NEW ---
 
         // ==== App State ====
@@ -794,6 +796,8 @@
                     context.fillStyle = 'orange';
                     context.arc(0, 0, baseRadius, 0, Math.PI * 2);
                     context.fill();
+                    context.save();
+                    context.rotate(triangleRotationAngle);
 
                     // 2. Draw the direction indicator TRIANGLE (offset downwards, pointing inwards)
                     context.fillStyle = 'red';
@@ -805,6 +809,7 @@
                     context.lineTo(triBaseX, triangleOffsetY + triBaseHalfWidth);
                     context.closePath(); // Line back to the tip
                     context.fill();
+                    context.restore();
 
                     // 3. Draw selection indicator if selected
                     if (isSelected) {
