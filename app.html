@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Autocross Mapper</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+            background-color: #000;
+            color: #fff;
+        }
+        
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        #header {
+            padding: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        #map-container {
+            position: relative;
+            flex-grow: 1;
+            background-color: #111;
+            overflow: hidden;
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        #current-location {
+            background-color: blue;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 5;
+        }
+        
+        #controls {
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            text-align: center;
+            flex-grow: 1;
+            flex-basis: 0;
+            white-space: nowrap;
+        }
+        
+        button.primary {
+            background-color: #4285f4;
+            color: white;
+        }
+        
+        button.active {
+            background-color: #34a853;
+            color: white;
+        }
+        
+        button.danger {
+            background-color: #ea4335;
+            color: white;
+        }
+        
+        button.warning {
+            background-color: #fbbc05;
+            color: black;
+        }
+        
+        button:disabled {
+            background-color: #777;
+            color: #ccc;
+        }
+        
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            background-color: rgba(40, 40, 40, 0.7);
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+        
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+        }
+        
+        #location-info {
+            background-color: rgba(40, 40, 40, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            width: 100%;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        
+        .status-pill {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            margin-left: 5px;
+            font-size: 12px;
+        }
+        
+        .status-good {
+            background-color: #34a853;
+            color: white;
+        }
+        
+        .status-bad {
+            background-color: #ea4335;
+            color: white;
+        }
+        
+        #modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            background-color: #222;
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 400px;
+        }
+        
+        .modal-title {
+            font-size: 18px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .modal-input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            border: 1px solid #444;
+            background-color: #333;
+            color: white;
+        }
+        
+        .modal-actions {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        #charts-list {
+            list-style: none;
+            margin-bottom: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #444;
+            border-radius: 5px;
+        }
+        
+        .chart-item {
+            padding: 10px;
+            border-bottom: 1px solid #444;
+            cursor: pointer;
+        }
+        
+        .chart-item:last-child {
+            border-bottom: none;
+        }
+        
+        .chart-item:hover {
+            background-color: #333;
+        }
+        
+        .selected-cone-indicator {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            padding: 5px 10px;
+            background-color: #FBBC05;
+            color: black;
+            border-radius: 15px;
+            font-weight: bold;
+            display: none;
+            z-index: 10;
+        }
+
+        /* Navigation Menu Styles */
+        #main-menu {
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            height: 100vh;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            background-color: #000;
+        }
+
+        .menu-title {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .menu-button {
+            width: 80%;
+            max-width: 300px;
+            padding: 15px;
+            font-size: 18px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .screen {
+            display: none;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        #back-button {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 8px 12px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 1px solid #444;
+            color: white;
+            border-radius: 5px;
+            z-index: 20;
+        }
+        
+        /* Noselect class to prevent text selection */
+        .noselect {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+    </style>
+</head>
+<body class="noselect">
+    <!-- Main Menu Screen -->
+    <div id="main-menu-screen" class="screen active">
+        <div id="main-menu">
+            <h1 class="menu-title">Autocross Mapper</h1>
+            <button class="menu-button" id="new-chart-button">Create New Chart</button>
+            <button class="menu-button" id="saved-charts-button">View Saved Charts</button>
+        </div>
+    </div>
+    
+    <!-- Mapping Screen -->
+    <div id="mapping-screen" class="screen">
+        <div id="app">
+            <button id="back-button">←</button>
+            
+            <div id="header">
+                <div id="location-info">
+                    Waiting for GPS...
+                    <span id="accuracy-status" class="status-pill status-bad">NOT READY</span>
+                </div>
+                <button id="save-button" class="primary">Save</button>
+            </div>
+            
+            <div id="map-container">
+                <canvas id="canvas"></canvas>
+                <div id="current-location"></div>
+                <div id="selected-cone-indicator" class="selected-cone-indicator">Pointer Cone Selected</div>
+            </div>
+            
+            <div id="controls">
+                <!-- GPS Accuracy Threshold Slider -->
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>GPS Accuracy Threshold:</span>
+                        <span id="accuracy-threshold-value">10.0 meters</span>
+                    </div>
+                    <input type="range" id="accuracy-threshold-slider" min="1" max="50" value="10" step="1">
+                </div>
+                
+                <!-- Cone Type Selection -->
+                <div class="control-row">
+                    <button id="btn-pointer-cone" class="primary">Pointer Cone</button>
+                    <button id="btn-single-cone">Single Cone</button>
+                </div>
+                
+                <!-- Tagging and Deleting -->
+                <div class="control-row">
+                    <button id="btn-tag-cone" class="primary" disabled>Tag Cone</button>
+                    <button id="btn-delete-last-cone" class="danger">Delete Last</button>
+                </div>
+                
+                <!-- Zoom Controls -->
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Zoom Level:</span>
+                        <span id="zoom-value">1.0x</span>
+                    </div>
+                    <input type="range" id="zoom-slider" min="0.1" max="8" value="1" step="0.1">
+                </div>
+                
+                <!-- World Rotation Controls -->
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Rotate World:</span>
+                        <span id="rotation-value">0°</span>
+                    </div>
+                    <input type="range" id="world-rotation-slider" min="-180" max="180" value="0" step="1">
+                </div>
+                
+                <!-- Pointer Cone Rotation Controls (initially hidden) -->
+                <div id="pointer-rotation-container" class="slider-container" style="display:none;">
+                    <div class="slider-label">
+                        <span>Pointer Rotation:</span>
+                        <span id="pointer-rotation-value">0°</span>
+                    </div>
+                    <input type="range" id="pointer-rotation-slider" min="-180" max="180" value="0" step="1">
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Saved Charts Screen -->
+    <div id="saved-charts-screen" class="screen">
+        <div id="app">
+            <button id="back-from-charts-button">←</button>
+            
+            <div id="header">
+                <h2>Saved Charts</h2>
+            </div>
+            
+            <div id="charts-container" style="flex-grow: 1; overflow-y: auto; padding: 10px;">
+                <div id="no-charts-message" style="text-align: center; padding: 20px;">
+                    No saved charts yet.
+                </div>
+                <ul id="charts-list" style="display: none;"></ul>
+            </div>
+            
+            <div id="controls">
+                <div class="control-row">
+                    <button id="export-chart-button" class="warning">Export Chart</button>
+                    <button id="import-chart-button" class="primary">Import Chart</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Chart View Screen -->
+    <div id="chart-view-screen" class="screen">
+        <div id="app">
+            <button id="back-from-chart-view-button">←</button>
+            
+            <div id="header">
+                <h2 id="chart-name">Chart View</h2>
+            </div>
+            
+            <div id="chart-map-container" style="position: relative; flex-grow: 1;">
+                <canvas id="chart-canvas"></canvas>
+            </div>
+            
+            <div id="controls">
+                <!-- Zoom Controls for Chart View -->
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Zoom Level:</span>
+                        <span id="chart-zoom-value">1.0x</span>
+                    </div>
+                    <input type="range" id="chart-zoom-slider" min="0.1" max="8" value="1" step="0.1">
+                </div>
+                
+                <!-- World Rotation Controls for Chart View -->
+                <div class="slider-container">
+                    <div class="slider-label">
+                        <span>Rotate World:</span>
+                        <span id="chart-rotation-value">0°</span>
+                    </div>
+                    <input type="range" id="chart-rotation-slider" min="-180" max="180" value="0" step="1">
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Save Chart Modal -->
+    <div id="modal">
+        <div class="modal-content">
+            <div class="modal-title">Save Chart</div>
+            <input type="text" id="chart-name-input" class="modal-input" placeholder="Enter chart name">
+            <div class="modal-actions">
+                <button id="cancel-save" class="danger">Cancel</button>
+                <button id="confirm-save" class="primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==== Enums and Constants ====
+        const ConeType = {
+            STARTING: 'starting',
+            POINTER: 'pointer',
+            SINGLE: 'single'
+        };
+        
+        const METERS_PER_PIXEL_INITIAL = 0.1;
+        const START_CONE_RADIUS = 20;
+        const POINTER_CONE_CIRCLE_RADIUS = 20;
+        const POINTER_CONE_RECT_WIDTH = 60;
+        const POINTER_CONE_RECT_HEIGHT = 25;
+        
+        // ==== App State ====
+        const state = {
+            selectedConeType: ConeType.POINTER,
+            currentLocation: null,
+            cones: [],
+            selectedConeIndex: null,
+            pointerConeRotation: 0,
+            worldRotation: 0,
+            zoomScale: 1.0,
+            isDragging: false,
+            lastTouchX: 0,
+            lastTouchY: 0,
+            offsetX: 0,
+            offsetY: 0,
+            metersPerPixel: METERS_PER_PIXEL_INITIAL,
+            gpsAccuracyThreshold: 10.0,
+            gpsAccuracyInMeters: 0,
+            isGPSAccuracyGood: false,
+            savedCharts: [],
+            currentViewingChart: null
+        };
+        
+        // ==== DOM Elements ====
+        // Navigation
+        const mainMenuScreen = document.getElementById('main-menu-screen');
+        const mappingScreen = document.getElementById('mapping-screen');
+        const savedChartsScreen = document.getElementById('saved-charts-screen');
+        const chartViewScreen = document.getElementById('chart-view-screen');
+        const newChartButton = document.getElementById('new-chart-button');
+        const savedChartsButton = document.getElementById('saved-charts-button');
+        const backButton = document.getElementById('back-button');
+        const backFromChartsButton = document.getElementById('back-from-charts-button');
+        const backFromChartViewButton = document.getElementById('back-from-chart-view-button');
+        
+        // Mapping screen elements
+        const locationInfo = document.getElementById('location-info');
+        const accuracyStatus = document.getElementById('accuracy-status');
+        const saveButton = document.getElementById('save-button');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const btnPointerCone = document.getElementById('btn-pointer-cone');
+        const btnSingleCone = document.getElementById('btn-single-cone');
+        const btnTagCone = document.getElementById('btn-tag-cone');
+        const btnDeleteLastCone = document.getElementById('btn-delete-last-cone');
+        const accuracyThresholdSlider = document.getElementById('accuracy-threshold-slider');
+        const accuracyThresholdValue = document.getElementById('accuracy-threshold-value');
+        const zoomSlider = document.getElementById('zoom-slider');
+        const zoomValue = document.getElementById('zoom-value');
+        const worldRotationSlider = document.getElementById('world-rotation-slider');
+        const rotationValue = document.getElementById('rotation-value');
+        const pointerRotationContainer = document.getElementById('pointer-rotation-container');
+        const pointerRotationSlider = document.getElementById('pointer-rotation-slider');
+        const pointerRotationValue = document.getElementById('pointer-rotation-value');
+        const selectedConeIndicator = document.getElementById('selected-cone-indicator');
+        
+        // Chart view elements
+        const chartCanvas = document.getElementById('chart-canvas');
+        const chartCtx = chartCanvas.getContext('2d');
+        const chartName = document.getElementById('chart-name');
+        const chartZoomSlider = document.getElementById('chart-zoom-slider');
+        const chartZoomValue = document.getElementById('chart-zoom-value');
+        const chartRotationSlider = document.getElementById('chart-rotation-slider');
+        const chartRotationValue = document.getElementById('chart-rotation-value');
+        
+        // Saved charts screen elements
+        const chartsContainer = document.getElementById('charts-container');
+        const noChartsMessage = document.getElementById('no-charts-message');
+        const chartsList = document.getElementById('charts-list');
+        const exportChartButton = document.getElementById('export-chart-button');
+        const importChartButton = document.getElementById('import-chart-button');
+        
+        // Modal elements
+        const modal = document.getElementById('modal');
+        const chartNameInput = document.getElementById('chart-name-input');
+        const cancelSaveButton = document.getElementById('cancel-save');
+        const confirmSaveButton = document.getElementById('confirm-save');
+        
+        // ==== Core Classes ====
+        class Cone {
+            constructor(location, type = ConeType.SINGLE, rotation = 0) {
+                this.location = location;
+                this.type = type;
+                this.rotation = rotation;
+                this.id = 'cone_' + Date.now() + '_' + Math.random();
+                this.screenX = 0;
+                this.screenY = 0;
+            }
+        }
+        
+        // ==== Utility Functions ====
+        // Convert screen coordinates to geolocation
+        function screenToLocation(screenX, screenY) {
+            if (!state.currentLocation) return null;
+            
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            const dx = (screenX - centerX - state.offsetX) * state.metersPerPixel;
+            const dy = (screenY - centerY - state.offsetY) * state.metersPerPixel;
+            
+            // Convert meters to latitude/longitude
+            const metersPerLatitude = 111111; // approx meters per degree of latitude
+            const metersPerLongitude = 111111 * Math.cos(state.currentLocation.latitude * Math.PI / 180);
+            
+            return {
+                latitude: state.currentLocation.latitude - dy / metersPerLatitude,
+                longitude: state.currentLocation.longitude + dx / metersPerLongitude
+            };
+        }
+        
+        // Convert location to screen coordinates
+        function locationToScreen(location, referenceLocation) {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            const metersPerLatitude = 111111; // approx meters per degree of latitude
+            const metersPerLongitude = 111111 * Math.cos(referenceLocation.latitude * Math.PI / 180);
+            
+            const dy = (referenceLocation.latitude - location.latitude) * metersPerLatitude;
+            const dx = (location.longitude - referenceLocation.longitude) * metersPerLongitude;
+            
+            return {
+                x: centerX + state.offsetX + dx / state.metersPerPixel,
+                y: centerY + state.offsetY + dy / state.metersPerPixel
+            };
+        }
+        
+        // Update screen positions for all cones
+        function updateConeScreenPositions() {
+            if (!state.currentLocation) return;
+            
+            for (const cone of state.cones) {
+                const screenPos = locationToScreen(cone.location, state.currentLocation);
+                cone.screenX = screenPos.x;
+                cone.screenY = screenPos.y;
+            }
+        }
+        
+        // Find a cone at the given coordinates
+        function findConeAt(x, y) {
+            // Check all cones (reverse order to handle overlap - last drawn is checked first)
+            for (let i = state.cones.length - 1; i >= 0; i--) {
+                const cone = state.cones[i];
+                const distance = Math.sqrt(
+                    Math.pow(x - cone.screenX, 2) + 
+                    Math.pow(y - cone.screenY, 2)
+                );
+                
+                if (distance <= POINTER_CONE_CIRCLE_RADIUS * state.zoomScale) {
+                    return i; // Return index of found cone
+                }
+            }
+            
+            return null;
+        }
+        
+        // Draw all cones
+        function drawCones(context, cones, referenceLocation, zoomScale, worldRotation) {
+            const centerX = context.canvas.width / 2;
+            const centerY = context.canvas.height / 2;
+            
+            // Save the context state
+            context.save();
+            
+            // Apply world rotation
+            context.translate(centerX, centerY);
+            context.rotate(worldRotation * Math.PI / 180);
+            context.translate(-centerX, -centerY);
+            
+            // Draw each cone
+            cones.forEach((cone, index) => {
+                let screenPos;
+                
+                if (context === ctx) {
+                    // In mapping view, use pre-calculated screen positions
+                    screenPos = { x: cone.screenX, y: cone.screenY };
+                } else {
+                    // In chart view, calculate positions relative to first cone
+                    screenPos = locationToScreen(cone.location, referenceLocation);
+                    screenPos.x *= zoomScale;
+                    screenPos.y *= zoomScale;
+                    screenPos.x += centerX;
+                    screenPos.y += centerY;
+                }
+                
+                const isSelected = index === state.selectedConeIndex;
+                const coneSize = (index === 0 ? START_CONE_RADIUS : POINTER_CONE_CIRCLE_RADIUS) * zoomScale;
+                
+                if (index === 0) {
+                    // Starting cone (green)
+                    context.beginPath();
+                    context.fillStyle = 'green';
+                    context.arc(screenPos.x, screenPos.y, coneSize, 0, Math.PI * 2);
+                    context.fill();
+                } else if (cone.type === ConeType.POINTER) {
+                    // Pointer cone (orange with direction indicator)
+                    context.save();
+                    context.translate(screenPos.x, screenPos.y);
+                    context.rotate(cone.rotation * Math.PI / 180);
+                    
+                    // Draw circle
+                    context.beginPath();
+                    context.fillStyle = 'orange';
+                    context.arc(0, 0, coneSize, 0, Math.PI * 2);
+                    context.fill();
+                    
+                    // Draw rectangle pointer
+                    context.fillRect(
+                        0, 
+                        -POINTER_CONE_RECT_HEIGHT * zoomScale / 2, 
+                        POINTER_CONE_RECT_WIDTH * zoomScale, 
+                        POINTER_CONE_RECT_HEIGHT * zoomScale
+                    );
+                    
+                    // Draw selection indicator
+                    if (isSelected) {
+                        context.beginPath();
+                        context.strokeStyle = 'green';
+                        context.lineWidth = 3;
+                        context.arc(0, 0, coneSize + 5, 0, Math.PI * 2);
+                        context.stroke();
+                    }
+                    
+                    context.restore();
+                } else {
+                    // Single cone (orange)
+                    context.beginPath();
+                    context.fillStyle = 'orange';
+                    context.arc(screenPos.x, screenPos.y, coneSize, 0, Math.PI * 2);
+                    context.fill();
+                    
+                    if (isSelected) {
+                        context.beginPath();
+                        context.strokeStyle = 'green';
+                        context.lineWidth = 3;
+                        context.arc(screenPos.x, screenPos.y, coneSize + 5, 0, Math.PI * 2);
+                        context.stroke();
+                    }
+                }
+            });
+            
+            // Restore the context state
+            context.restore();
+        }
+        
+        // Clear canvas and redraw everything
+        function drawMap() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (state.cones.length > 0) {
+                drawCones(ctx, state.cones, state.currentLocation, state.zoomScale, state.worldRotation);
+            }
+        }
+        
+        function drawChartView() {
+            if (!state.currentViewingChart) return;
+            
+            chartCtx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+            
+            const chart = state.currentViewingChart;
+            const firstCone = chart.coneData[0];
+            
+            // Check if we have cones to draw
+            if (chart.coneData.length > 0) {
+                drawCones(
+                    chartCtx, 
+                    chart.coneData, 
+                    firstCone.location, 
+                    parseFloat(chartZoomSlider.value), 
+                    parseFloat(chartRotationSlider.value)
+                );
+            }
+        }
+        
+        // Resize canvas to fill container
+        function resizeCanvas() {
+            const mapContainer = canvas.parentElement;
+            canvas.width = mapContainer.clientWidth;
+            canvas.height = mapContainer.clientHeight;
+            
+            if (chartCanvas.parentElement) {
+                chartCanvas.width = chartCanvas.parentElement.clientWidth;
+                chartCanvas.height = chartCanvas.parentElement.clientHeight;
+            }
+            
+            drawMap();
+            if (state.currentViewingChart) {
+                drawChartView();
+            }
+        }
+        
+        // ==== Cone Management Functions ====
+        // Tag a new cone at the current location
+        function tagCone() {
+            if (!state.currentLocation || !state.isGPSAccuracyGood) return;
+            
+            if (state.cones.length === 0) {
+                // First cone is always a starting cone
+                const startCone = new Cone(state.currentLocation, ConeType.STARTING);
+                state.cones.push(startCone);
+            } else {
+                // Add a new cone of the selected type
+                const newCone = new Cone(
+                    state.currentLocation, 
+                    state.selectedConeType, 
+                    state.selectedConeType === ConeType.POINTER ? state.pointerConeRotation : 0
+                );
+                
+                state.cones.push(newCone);
+                
+                // If it's a pointer cone, select it automatically
+                if (state.selectedConeType === ConeType.POINTER) {
+                    selectCone(state.cones.length - 1);
+                }
+            }
+            
+            updateConeScreenPositions();
+            drawMap();
+        }
+        
+        // Delete the last cone
+        function deleteLastCone() {
+            if (state.cones.length > 0) {
+                // If the selected cone is being deleted, deselect it
+                if (state.selectedConeIndex === state.cones.length - 1) {
+                    deselectCone();
+                }
+                
+                state.cones.pop();
+                drawMap();
+            }
+        }
+        
+        // Select a cone for rotation or other operations
+        function selectCone(index) {
+            state.selectedConeIndex = index;
+            const cone = state.cones[index];
+            
+            if (cone.type === ConeType.POINTER) {
+                state.pointerConeRotation = cone.rotation;
+                pointerRotationSlider.value = cone.rotation;
+                pointerRotationValue.textContent = `${Math.round(cone.rotation)}°`;
+                pointerRotationContainer.style.display = 'block';
+                selectedConeIndicator.style.display = 'block';
+            } else {
+                pointerRotationContainer.style.display = 'none';
+                selectedConeIndicator.style.display = 'none';
+            }
+            
+            drawMap();
+        }
+        
+        // Deselect the currently selected cone
+        function deselectCone() {
+            state.selectedConeIndex = null;
+            pointerRotationContainer.style.display = 'none';
+            selectedConeIndicator.style.display = 'none';
+            drawMap();
+        }
+        
+        // Update rotation for the selected pointer cone
+        function updatePointerConeRotation(rotation) {
+            if (state.selectedConeIndex !== null && 
+                state.cones[state.selectedConeIndex].type === ConeType.POINTER) {
+                
+                state.cones[state.selectedConeIndex].rotation = rotation;
+                state.pointerConeRotation = rotation;
+                pointerRotationValue.textContent = `${Math.round(rotation)}°`;
+                drawMap();
+            }
+        }
+        
+        // ==== Geolocation Functions ====
+        // Initialize and start geolocation tracking
+        function initGeolocation() {
+            if ('geolocation' in navigator) {
+                // Get initial position
+                navigator.geolocation.getCurrentPosition(
+                    updateLocation,
+                    handleLocationError,
+                    { 
+                        enableHighAccuracy: true, 
+                        maximumAge: 0, 
+                        timeout: 5000 
+                    }
+                );
+                
+                // Start watching position for continuous updates
+                navigator.geolocation.watchPosition(
+                    updateLocation,
+                    handleLocationError,
+                    { 
+                        enableHighAccuracy: true, 
+                        maximumAge: 0, 
+                        timeout: 5000 
+                    }
+                );
+            } else {
+                locationInfo.textContent = 'Geolocation not available';
+                accuracyStatus.textContent = 'ERROR';
+                btnTagCone.disabled = true;
+            }
+        }
+        
+        // Update the current location with new position data
+        function updateLocation(position) {
+            state.currentLocation = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude
+            };
+            
+            // Update GPS accuracy information
+            state.gpsAccuracyInMeters = position.coords.accuracy;
+            state.isGPSAccuracyGood = state.gpsAccuracyInMeters <= state.gpsAccuracyThreshold;
+            
+            // Update UI elements
+            locationInfo.textContent = `Lat: ${position.coords.latitude.toFixed(6)}, Lng: ${position.coords.longitude.toFixed(6)} | `;
+            
+            if (state.isGPSAccuracyGood) {
+                accuracyStatus.textContent = 'OK';
+                accuracyStatus.className = 'status-pill status-good';
+                btnTagCone.disabled = false;
+            } else {
+                accuracyStatus.textContent = 'NOT READY';
+                accuracyStatus.className = 'status-pill status-bad';
+                btnTagCone.disabled = true;
+            }
+            
+            // Update cone positions and redraw
+            updateConeScreenPositions();
+            drawMap();
+        }
+        
+        // Handle geolocation errors
+        function handleLocationError(error) {
+            console.error('Location error:', error.message);
+            
+            locationInfo.textContent = 'GPS Error';
+            accuracyStatus.textContent = 'ERROR';
+            accuracyStatus.className = 'status-pill status-bad';
+            btnTagCone.disabled = true;
+        }
+        
+        // ==== Storage Functions ====
+        // Save the current chart to local storage
+        function saveCurrentChart(name) {
+            if (state.cones.length === 0) {
+                alert('No cones to save!');
+                return;
+            }
+            
+            const chartData = {
+                name: name,
+                coneData: state.cones,
+                rotationAngle: state.worldRotation,
+                createdAt: new Date().toISOString()
+            };
+            
+            // Load existing charts
+            loadSavedCharts();
+            
+            // Add new chart
+            state.savedCharts.push(chartData);
+            
+            // Save back to local storage
+            localStorage.setItem('autocrossCharts', JSON.stringify(state.savedCharts));
+            
+            alert(`Chart "${name}" saved successfully!`);
+        }
+        
+        // Load saved charts from local storage
+        function loadSavedCharts() {
+            const storedCharts = localStorage.getItem('autocrossCharts');
+            if (storedCharts) {
+                state.savedCharts = JSON.parse(storedCharts);
+            } else {
+                state.savedCharts = [];
+            }
+            return state.savedCharts;
+        }
+        
+        // Export a chart to a file
+        function exportChart(chart) {
+            const chartJson = JSON.stringify(chart, null, 2);
+            const blob = new Blob([chartJson], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${chart.name.replace(/\s+/g, '_')}.json`;
+            a.click();
+            
+            setTimeout(() => {
+                URL.revokeObjectURL(url);
+            }, 100);
+        }
+        
+        // Import a chart from a file
+        function importChart(file) {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const chartData = JSON.parse(e.target.result);
+                    
+                    // Validate the chart data has the required properties
+                    if (!chartData.name || !chartData.coneData || chartData.coneData.length === 0) {
+                        throw new Error('Invalid chart file format');
+                    }
+                    
+                    // Load existing charts
+                    loadSavedCharts();
+                    
+                    // Add imported chart
+                    state.savedCharts.push(chartData);
+                    
+                    // Save back to local storage
+                    localStorage.setItem('autocrossCharts', JSON.stringify(state.savedCharts));
+                    
+                    // Refresh the charts list
+                    updateChartsList();
+                    
+                    alert(`Chart "${chartData.name}" imported successfully!`);
+                } catch (error) {
+                    alert('Error importing chart: ' + error.message);
+                }
+            };
+            
+            reader.readAsText(file);
+        }
+        
+        // Update the charts list in the saved charts screen
+        function updateChartsList() {
+            const charts = loadSavedCharts();
+            
+            if (charts.length === 0) {
+                noChartsMessage.style.display = 'block';
+                chartsList.style.display = 'none';
+                return;
+            }
+            
+            noChartsMessage.style.display = 'none';
+            chartsList.style.display = 'block';
+            chartsList.innerHTML = '';
+            
+            charts.forEach((chart, index) => {
+                const li = document.createElement('li');
+                li.className = 'chart-item';
+                
+                // Format date if available
+                let dateInfo = '';
+                if (chart.createdAt) {
+                    const date = new Date(chart.createdAt);
+                    dateInfo = ` (${date.toLocaleDateString()})`;
+                }
+                
+                li.textContent = `${chart.name}${dateInfo} - ${chart.coneData.length} cones`;
+                
+                li.addEventListener('click', () => {
+                    viewChart(chart);
+                });
+                
+                chartsList.appendChild(li);
+            });
+        }
+        
+        // View a saved chart
+        function viewChart(chart) {
+            state.currentViewingChart = chart;
+            
+            // Set up the chart view
+            chartName.textContent = chart.name;
+            chartRotationSlider.value = chart.rotationAngle || 0;
+            chartRotationValue.textContent = `${Math.round(chart.rotationAngle || 0)}°`;
+            chartZoomSlider.value = 1.0;
+            chartZoomValue.textContent = '1.0x';
+            
+            // Navigate to chart view screen
+            navigateToScreen('chart-view');
+            
+            // Draw the chart
+            resizeCanvas();
+            drawChartView();
+        }
+        
+        // Generate a default chart name based on date/time
+        function generateChartName() {
+            const now = new Date();
+            const date = now.toISOString().split('T')[0];
+            const time = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+            return `Chart_${date}_${time}`;
+        }
+        
+        // ==== Navigation Functions ====
+        // Navigate to a specific screen
+        function navigateToScreen(screenId) {
+            // Hide all screens
+            document.querySelectorAll('.screen').forEach(screen => {
+                screen.classList.remove('active');
+            });
+            
+            // Show the requested screen
+            document.getElementById(screenId + '-screen').classList.add('active');
+            
+            // Special handling for different screens
+            if (screenId === 'mapping') {
+                resizeCanvas();
+                initGeolocation();
+            } else if (screenId === 'saved-charts') {
+                updateChartsList();
+            } else if (screenId === 'chart-view') {
+                resizeCanvas();
+            }
+        }
+        
+        // ==== Event Handlers ====
+        // Handle canvas pointer down events
+        function handleCanvasPointerDown(e) {
+            e.preventDefault();
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            state.lastTouchX = x;
+            state.lastTouchY = y;
+            
+            // Check if a cone was tapped
+            const coneIndex = findConeAt(x, y);
+            
+            if (coneIndex !== null) {
+                // Select the tapped cone
+                selectCone(coneIndex);
+            } else {
+                // Start dragging the map
+                deselectCone();
+                state.isDragging = true;
+            }
+        }
+        
+        // Handle canvas pointer move events
+        function handleCanvasPointerMove(e) {
+            e.preventDefault();
+            
+            if (!state.isDragging && state.selectedConeIndex === null) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            if (state.isDragging) {
+                // Pan the map
+                const dx = x - state.lastTouchX;
+                const dy = y - state.lastTouchY;
+                
+                state.offsetX += dx;
+                state.offsetY += dy;
+                
+                updateConeScreenPositions();
+                drawMap();
+            } else if (state.selectedConeIndex !== null) {
+                // Move the selected cone
+                const cone = state.cones[state.selectedConeIndex];
+                cone.screenX = x;
+                cone.screenY = y;
+                
+                // Update its location
+                const newLocation = screenToLocation(x, y);
+                if (newLocation) {
+                    cone.location = newLocation;
+                }
+                
+                drawMap();
+            }
+            
+            state.lastTouchX = x;
+            state.lastTouchY = y;
+        }
+        
+        // Handle canvas pointer up events
+        function handleCanvasPointerUp(e) {
+            e.preventDefault();
+            
+            state.isDragging = false;
+        }
+        
+        // Handle touch events for mobile devices
+        function handleCanvasTouchStart(e) {
+            e.preventDefault();
+            
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                const x = touch.clientX - rect.left;
+                const y = touch.clientY - rect.top;
+                
+                state.lastTouchX = x;
+                state.lastTouchY = y;
+                
+                // Check if a cone was tapped
+                const coneIndex = findConeAt(x, y);
+                
+                if (coneIndex !== null) {
+                    // Select the tapped cone
+                    selectCone(coneIndex);
+                } else {
+                    // Start dragging the map
+                    deselectCone();
+                    state.isDragging = true;
+                }
+            }
+        }
+        
+        function handleCanvasTouchMove(e) {
+            e.preventDefault();
+            
+            if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                const x = touch.clientX - rect.left;
+                const y = touch.clientY - rect.top;
+                
+                if (state.isDragging) {
+                    // Pan the map
+                    const dx = x - state.lastTouchX;
+                    const dy = y - state.lastTouchY;
+                    
+                    state.offsetX += dx;
+                    state.offsetY += dy;
+                    
+                    updateConeScreenPositions();
+                    drawMap();
+                } else if (state.selectedConeIndex !== null) {
+                    // Move the selected cone
+                    const cone = state.cones[state.selectedConeIndex];
+                    cone.screenX = x;
+                    cone.screenY = y;
+                    
+                    // Update its location
+                    const newLocation = screenToLocation(x, y);
+                    if (newLocation) {
+                        cone.location = newLocation;
+                    }
+                    
+                    drawMap();
+                }
+                
+                state.lastTouchX = x;
+                state.lastTouchY = y;
+            }
+        }
+        
+        function handleCanvasTouchEnd(e) {
+            e.preventDefault();
+            
+            state.isDragging = false;
+        }
+        
+        // Handle Save button click
+        function handleSaveClick() {
+            if (state.cones.length === 0) {
+                alert('No cones to save!');
+                return;
+            }
+            
+            // Show the save modal
+            chartNameInput.value = generateChartName();
+            modal.style.display = 'flex';
+        }
+        
+        // Handle Save modal confirm button
+        function handleConfirmSave() {
+            const name = chartNameInput.value.trim();
+            
+            if (!name) {
+                alert('Please enter a name for the chart');
+                return;
+            }
+            
+            saveCurrentChart(name);
+            modal.style.display = 'none';
+        }
+        
+        // Handle Save modal cancel button
+        function handleCancelSave() {
+            modal.style.display = 'none';
+        }
+        
+        // Handle Export chart button
+        function handleExportClick() {
+            const charts = loadSavedCharts();
+            
+            if (charts.length === 0) {
+                alert('No charts to export!');
+                return;
+            }
+            
+            // Show modal with chart selection
+            modal.style.display = 'flex';
+            // TODO: Implement chart selection for export
+        }
+        
+        // Handle Import chart button
+        function handleImportClick() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            
+            input.onchange = function(e) {
+                if (e.target.files.length > 0) {
+                    importChart(e.target.files[0]);
+                }
+            };
+            
+            input.click();
+        }
+        
+        // ==== Initialization ====
+        function initApp() {
+            // Set up canvas
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Set up event listeners for navigation
+            newChartButton.addEventListener('click', () => navigateToScreen('mapping'));
+            savedChartsButton.addEventListener('click', () => navigateToScreen('saved-charts'));
+            backButton.addEventListener('click', () => navigateToScreen('main-menu'));
+            backFromChartsButton.addEventListener('click', () => navigateToScreen('main-menu'));
+            backFromChartViewButton.addEventListener('click', () => navigateToScreen('saved-charts'));
+            
+            // Set up event listeners for mapping controls
+            btnPointerCone.addEventListener('click', () => {
+                state.selectedConeType = ConeType.POINTER;
+                btnPointerCone.classList.add('active');
+                btnSingleCone.classList.remove('active');
+            });
+            
+            btnSingleCone.addEventListener('click', () => {
+                state.selectedConeType = ConeType.SINGLE;
+                btnSingleCone.classList.add('active');
+                btnPointerCone.classList.remove('active');
+                deselectCone();
+            });
+            
+            btnTagCone.addEventListener('click', tagCone);
+            btnDeleteLastCone.addEventListener('click', deleteLastCone);
+            saveButton.addEventListener('click', handleSaveClick);
+            
+            // Set up event listeners for sliders
+            accuracyThresholdSlider.addEventListener('input', () => {
+                state.gpsAccuracyThreshold = parseFloat(accuracyThresholdSlider.value);
+                accuracyThresholdValue.textContent = `${state.gpsAccuracyThreshold.toFixed(1)} meters`;
+                
+                // Update GPS status based on new threshold
+                state.isGPSAccuracyGood = state.gpsAccuracyInMeters <= state.gpsAccuracyThreshold;
+                
+                if (state.isGPSAccuracyGood) {
+                    accuracyStatus.textContent = 'OK';
+                    accuracyStatus.className = 'status-pill status-good';
+                    btnTagCone.disabled = false;
+                } else {
+                    accuracyStatus.textContent = 'NOT READY';
+                    accuracyStatus.className = 'status-pill status-bad';
+                    btnTagCone.disabled = true;
+                }
+            });
+            
+            zoomSlider.addEventListener('input', () => {
+                state.zoomScale = parseFloat(zoomSlider.value);
+                zoomValue.textContent = `${state.zoomScale.toFixed(1)}x`;
+                drawMap();
+            });
+            
+            worldRotationSlider.addEventListener('input', () => {
+                state.worldRotation = parseFloat(worldRotationSlider.value);
+                rotationValue.textContent = `${Math.round(state.worldRotation)}°`;
+                drawMap();
+            });
+            
+            pointerRotationSlider.addEventListener('input', () => {
+                const rotation = parseFloat(pointerRotationSlider.value);
+                updatePointerConeRotation(rotation);
+            });
+            
+            // Set up event listeners for chart view controls
+            chartZoomSlider.addEventListener('input', () => {
+                const zoomValue = parseFloat(chartZoomSlider.value);
+                chartZoomValue.textContent = `${zoomValue.toFixed(1)}x`;
+                drawChartView();
+            });
+            
+            chartRotationSlider.addEventListener('input', () => {
+                const rotationValue = parseFloat(chartRotationSlider.value);
+                chartRotationValue.textContent = `${Math.round(rotationValue)}°`;
+                drawChartView();
+            });
+            
+            // Set up event listeners for saved charts screen
+            exportChartButton.addEventListener('click', handleExportClick);
+            importChartButton.addEventListener('click', handleImportClick);
+            
+            // Set up event listeners for save modal
+            confirmSaveButton.addEventListener('click', handleConfirmSave);
+            cancelSaveButton.addEventListener('click', handleCancelSave);
+            
+            // Set up canvas event listeners for mouse/touch interactions
+            canvas.addEventListener('mousedown', handleCanvasPointerDown);
+            canvas.addEventListener('mousemove', handleCanvasPointerMove);
+            canvas.addEventListener('mouseup', handleCanvasPointerUp);
+            canvas.addEventListener('mouseleave', handleCanvasPointerUp);
+            
+            canvas.addEventListener('touchstart', handleCanvasTouchStart, { passive: false });
+            canvas.addEventListener('touchmove', handleCanvasTouchMove, { passive: false });
+            canvas.addEventListener('touchend', handleCanvasTouchEnd, { passive: false });
+            
+            // Initialize with "Pointer Cone" selected by default
+            btnPointerCone.classList.add('active');
+        }
+        
+        // Start the app when the window loads
+        window.addEventListener('load', initApp);
+    </script>
+</body>
+</html>
