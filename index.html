@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Autocross Mapper (Leaflet v2)</title>
+    <title>Autocross Mapper (Leaflet + World Rotation Workaround)</title>
 
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -32,71 +32,25 @@
         #app { display: flex; flex-direction: column; height: 100%; width: 100%; }
 
         /* Header Styles */
-        #header {
-            padding: 8px 10px;
-            background-color: rgba(0, 0, 0, 0.7);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-shrink: 0;
-            gap: 10px;
-            z-index: 500; /* Above map */
-            position: relative; /* Needed for z-index */
-        }
+        #header { padding: 8px 10px; background-color: rgba(0, 0, 0, 0.7); display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 10px; z-index: 500; position: relative; }
         #location-info { background-color: rgba(40, 40, 40, 0.7); padding: 5px 10px; border-radius: 5px; text-align: center; font-size: 12px; flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .status-pill { display: inline-block; padding: 3px 8px; border-radius: 12px; margin-left: 5px; font-size: 11px; font-weight: bold; }
-        .status-good { background-color: #34a853; color: white; }
-        .status-bad { background-color: #ea4335; color: white; }
-        .status-wait { background-color: #fbbc05; color: black; }
+        .status-good { background-color: #34a853; color: white; } .status-bad { background-color: #ea4335; color: white; } .status-wait { background-color: #fbbc05; color: black; }
 
-        /* --- Leaflet Map Container --- */
-        #map, #chart-map {
-            flex-grow: 1; /* Take remaining vertical space */
-            background-color: #222; /* Fallback bg */
-            width: 100%;
-            z-index: 1; /* Below UI elements */
-            cursor: grab; /* Default Leaflet cursor */
-        }
+        /* Leaflet Map Container */
+        #map, #chart-map { flex-grow: 1; background-color: #222; width: 100%; z-index: 1; cursor: grab; }
         #map:active, #chart-map:active { cursor: grabbing; }
 
-        /* Hide old canvas and location marker (now handled by Leaflet) */
-        #canvas, #chart-canvas, #current-location { display: none !important; }
-
-         /* Selected Cone Indicator (Optional: marker styling might be better) */
-        .selected-cone-indicator {
-            position: absolute;
-            top: 55px; /* Adjust position */
-            left: 10px;
-            padding: 5px 10px;
-            background-color: rgba(251, 188, 5, 0.8); /* Semi-transparent */
-            color: black;
-            border-radius: 15px;
-            font-weight: bold;
-            font-size: 12px;
-            display: none;
-            z-index: 600; /* Above map */
-        }
+        /* Selected Cone Indicator */
+        .selected-cone-indicator { position: absolute; top: 55px; left: 10px; padding: 5px 10px; background-color: rgba(251, 188, 5, 0.8); color: black; border-radius: 15px; font-weight: bold; font-size: 12px; display: none; z-index: 600; }
 
         /* Controls Area */
-        #controls {
-            background-color: rgba(0, 0, 0, 0.7);
-            padding: 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            flex-shrink: 0;
-            z-index: 500; /* Above map */
-            position: relative; /* Needed for z-index */
-        }
+        #controls { background-color: rgba(0, 0, 0, 0.7); padding: 10px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; z-index: 500; position: relative; }
         .control-row { display: flex; justify-content: space-between; gap: 10px; }
 
         /* Button Styles */
         button { padding: 10px; border: none; border-radius: 5px; font-weight: bold; font-size: 14px; cursor: pointer; text-align: center; flex-grow: 1; flex-basis: 0; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
-        button.primary { background-color: #4285f4; color: white; }
-        button.active { background-color: #34a853; color: white; }
-        button.danger { background-color: #ea4335; color: white; }
-        button.warning { background-color: #fbbc05; color: black; }
-        button:disabled { background-color: #777; color: #ccc; cursor: not-allowed; }
+        button.primary { background-color: #4285f4; color: white; } button.active { background-color: #34a853; color: white; } button.danger { background-color: #ea4335; color: white; } button.warning { background-color: #fbbc05; color: black; } button:disabled { background-color: #777; color: #ccc; cursor: not-allowed; }
 
         /* Slider Styles */
         .slider-container { display: flex; flex-direction: column; padding: 8px 10px; background-color: rgba(40, 40, 40, 0.7); border-radius: 5px; gap: 5px; }
@@ -121,86 +75,27 @@
         #no-charts-message { text-align: center; padding: 20px; color: #aaa; }
         #charts-list { list-style: none; border: 1px solid #444; border-radius: 5px; overflow: hidden; }
         .chart-item { padding: 12px 15px; border-bottom: 1px solid #444; cursor: pointer; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
-        .chart-item:last-child { border-bottom: none; }
-        .chart-item:hover { background-color: #333; }
-        .chart-item-name { flex-grow: 1; margin-right: 10px; }
-        .chart-item-details { font-size: 12px; color: #bbb; white-space: nowrap; }
+        .chart-item:last-child { border-bottom: none; } .chart-item:hover { background-color: #333; }
+        .chart-item-name { flex-grow: 1; margin-right: 10px; } .chart-item-details { font-size: 12px; color: #bbb; white-space: nowrap; }
         .chart-item button { flex-grow: 0; padding: 5px 8px; font-size: 12px; margin-left: 10px; }
 
         /* Chart View Screen Header */
         #chart-name { text-align: center; font-size: 16px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-grow: 1; margin: 0 10px; }
 
         /* Back Button */
-        .back-button {
-            position: absolute;
-            top: 8px; /* Align with header padding */
-            left: 10px;
-            padding: 8px 12px;
-            background-color: rgba(50, 50, 50, 0.8); /* More opaque */
-            border: 1px solid #555;
-            color: white;
-            border-radius: 5px;
-            z-index: 600; /* Above map, below modal */
-            font-size: 16px;
-            line-height: 1;
-            cursor: pointer;
-        }
+        .back-button { position: absolute; top: 8px; left: 10px; padding: 8px 12px; background-color: rgba(50, 50, 50, 0.8); border: 1px solid #555; color: white; border-radius: 5px; z-index: 600; font-size: 16px; line-height: 1; cursor: pointer; }
 
-        /* --- Leaflet Marker Styling --- */
-        .cone-marker-icon {
-            /* Base style for the icon container div */
-            background: none;
-            border: none;
-            text-align: center;
-            line-height: 1;
-            /* Ensure SVG inside fills the div */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: visible; /* Allow SVG elements slightly outside box if needed */
-        }
-
-        /* Style for the SVG elements within the icons */
-        .cone-marker-icon svg {
-             width: 100%;
-             height: 100%;
-             overflow: visible; /* Important for pointer */
-        }
-        .cone-base { /* Style for the base circle */
-            fill: orange;
-            stroke: black;
-            stroke-width: 0.5;
-        }
-        .cone-pointer { /* Style for the direction triangle */
-            fill: red;
-            stroke: black;
-            stroke-width: 0.5;
-        }
-         .start-cone-base { /* Style for start cones */
-             fill: limegreen;
-             stroke: black;
-             stroke-width: 0.5;
-         }
-
-        /* Selection Highlight */
-        .cone-marker-icon.selected svg .cone-base,
-        .cone-marker-icon.selected svg .start-cone-base {
-             /* Example selection style: bright yellow outline */
-             stroke: yellow;
-             stroke-width: 2;
-        }
-        .cone-marker-icon.selected svg .cone-pointer {
-             /* Example selection style: bright yellow outline */
-             stroke: yellow;
-             stroke-width: 1;
-        }
-
-        /* Leaflet UI adjustments */
-        .leaflet-marker-draggable { cursor: grab; }
-        .leaflet-marker-dragging { cursor: grabbing; }
+        /* Leaflet Marker Styling */
+        .cone-marker-icon { background: none; border: none; text-align: center; line-height: 1; display: flex; justify-content: center; align-items: center; }
+        .cone-marker-icon svg { width: 100%; height: 100%; overflow: visible; }
+        .cone-base { fill: orange; stroke: black; stroke-width: 0.5; }
+        .cone-pointer { fill: red; stroke: black; stroke-width: 0.5; }
+        .start-cone-base { fill: limegreen; stroke: black; stroke-width: 0.5; }
+        .cone-marker-icon.selected svg .cone-base, .cone-marker-icon.selected svg .start-cone-base { stroke: yellow; stroke-width: 2; }
+        .cone-marker-icon.selected svg .cone-pointer { stroke: yellow; stroke-width: 1; }
+        .leaflet-marker-draggable { cursor: grab; } .leaflet-marker-dragging { cursor: grabbing; }
         .leaflet-control-attribution { font-size: 10px !important; background: rgba(255,255,255,0.7) !important; color: #333 !important; padding: 0 5px !important; }
         .leaflet-touch .leaflet-control-layers, .leaflet-touch .leaflet-bar { border: 2px solid rgba(0,0,0,0.2); }
-
     </style>
 </head>
 <body class="noselect">
@@ -220,7 +115,6 @@
         <div id="app">
             <button id="back-to-main-button" class="back-button">←</button>
             <div id="selected-cone-indicator" class="selected-cone-indicator">Pointer Cone Selected</div>
-
             <div id="header">
                 <div id="location-info">Waiting for GPS...<span id="accuracy-status" class="status-pill status-wait">WAIT</span></div>
                 <button id="save-button" class="primary" disabled>Save</button>
@@ -239,6 +133,14 @@
                     <button id="btn-tag-cone" class="primary" disabled>Tag Cone</button>
                     <button id="btn-delete-last-cone" class="danger">Delete Last</button>
                 </div>
+                 <!-- World Rotation Controls -->
+                 <div class="slider-container">
+                     <div class="slider-label">
+                         <span>Rotate World (Markers):</span>
+                         <span id="rotation-value">0°</span>
+                     </div>
+                     <input type="range" id="world-rotation-slider" min="-180" max="180" value="0" step="1">
+                 </div>
                 <div id="pointer-rotation-container" class="slider-container" style="display:none;">
                     <div class="slider-label"><span>Selected Pointer Rotation:</span><span id="pointer-rotation-value">0°</span></div>
                     <input type="range" id="pointer-rotation-slider" min="-180" max="180" value="0" step="1">
@@ -274,7 +176,7 @@
                 <button id="export-current-chart-button" class="warning">Export</button>
             </div>
             <div id="chart-map"></div>
-            <div id="controls" style="display:none;"> <!-- Hide controls section for chart view --></div>
+            <div id="controls" style="display:none;"></div>
         </div>
     </div>
 
@@ -296,31 +198,29 @@
     <script>
         // ==== Enums and Constants ====
         const ConeType = { STARTING: 'starting', POINTER: 'pointer', SINGLE: 'single' };
-        const INITIAL_MAP_ZOOM = 19;
-        const INITIAL_CHART_ZOOM = 18;
-        const ICON_SIZE_PX = 24; // Base size for icons
-        const POINTER_LENGTH = 10; // How far the pointer triangle extends from the center
-        const POINTER_WIDTH = 8;  // Base width of the pointer triangle
+        const INITIAL_MAP_ZOOM = 19; const INITIAL_CHART_ZOOM = 18;
+        const ICON_SIZE_PX = 24; const POINTER_LENGTH = 10; const POINTER_WIDTH = 8;
 
         // ==== App State ====
         const state = {
-            currentScreen: 'main-menu',
-            selectedConeType: ConeType.POINTER,
+            currentScreen: 'main-menu', selectedConeType: ConeType.POINTER,
             currentLocation: null, cones: [], selectedConeIndex: null,
             gpsAccuracyThreshold: 10.0, isGPSReady: false,
-            savedCharts: [], currentViewingChart: null,
-            pointerConeRotation: 0,
+            savedCharts: [], currentViewingChart: null, pointerConeRotation: 0,
+            worldRotation: 0,       // <-- Added back
+            rotationCenter: null, // <-- Added back { lat, lng }
             mapInstance: null, chartMapInstance: null, userLocationMarker: null,
             coneMarkersLayer: null, chartMarkersLayer: null,
         };
 
-        // ==== DOM Elements ==== (Assumed to be correctly fetched as before)
-        // ... getElementById calls for all elements ...
+        // ==== DOM Elements ====
         // Navigation & Screens
         const screens = { mainMenu: document.getElementById('main-menu-screen'), mapping: document.getElementById('mapping-screen'), savedCharts: document.getElementById('saved-charts-screen'), chartView: document.getElementById('chart-view-screen'), };
         const newChartButton = document.getElementById('new-chart-button'); const savedChartsButton = document.getElementById('saved-charts-button'); const backToMainButton = document.getElementById('back-to-main-button'); const backFromChartsButton = document.getElementById('back-from-charts-button'); const backFromChartViewButton = document.getElementById('back-from-chart-view-button');
         // Mapping Screen Elements
         const locationInfo = document.getElementById('location-info'); const accuracyStatus = document.getElementById('accuracy-status'); const saveButton = document.getElementById('save-button'); const mapContainer = document.getElementById('map'); const selectedConeIndicator = document.getElementById('selected-cone-indicator'); const accuracyThresholdSlider = document.getElementById('accuracy-threshold-slider'); const accuracyThresholdValue = document.getElementById('accuracy-threshold-value'); const btnPointerCone = document.getElementById('btn-pointer-cone'); const btnSingleCone = document.getElementById('btn-single-cone'); const btnTagCone = document.getElementById('btn-tag-cone'); const btnDeleteLastCone = document.getElementById('btn-delete-last-cone'); const pointerRotationContainer = document.getElementById('pointer-rotation-container'); const pointerRotationSlider = document.getElementById('pointer-rotation-slider'); const pointerRotationValue = document.getElementById('pointer-rotation-value');
+        const worldRotationSlider = document.getElementById('world-rotation-slider'); // <-- Added back
+        const rotationValue = document.getElementById('rotation-value');             // <-- Added back
         // Saved Charts Screen Elements
         const chartsContainer = document.getElementById('charts-container'); const noChartsMessage = document.getElementById('no-charts-message'); const chartsList = document.getElementById('charts-list'); const importChartButtonMain = document.getElementById('import-chart-button-main'); const importChartButtonSaved = document.getElementById('import-chart-button-saved'); const deleteAllChartsButton = document.getElementById('delete-all-charts-button');
         // Chart View Screen Elements
@@ -331,537 +231,252 @@
         const importFileInput = document.getElementById('import-file-input');
 
         // ==== Core Classes ====
-        class Cone {
-            constructor(latitude, longitude, type = ConeType.SINGLE, rotation = 0) {
-                this.latitude = latitude; this.longitude = longitude; this.type = type;
-                this.rotation = rotation; this.id = 'cone_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                this.leafletMarker = null;
-            }
+        class Cone { /* ... same as before ... */
+            constructor(latitude, longitude, type = ConeType.SINGLE, rotation = 0) { this.latitude = latitude; this.longitude = longitude; this.type = type; this.rotation = rotation; this.id = 'cone_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9); this.leafletMarker = null; }
         }
 
-        // ==== Leaflet Icons ====
-        // Use SVG for better control over appearance
-        const createSvgIcon = (type) => {
-            const svgNs = "http://www.w3.org/2000/svg";
-            const svg = document.createElementNS(svgNs, "svg");
-            // Centered viewbox allows drawing around (0,0) easily
-            // Extends from -12 to +12 horizontally and vertically (total 24 units)
-            svg.setAttribute("viewBox", "-12 -12 24 24");
-            svg.setAttribute("width", ICON_SIZE_PX);
-            svg.setAttribute("height", ICON_SIZE_PX);
-            // Add overflow visible to ensure pointer isn't clipped if it extends slightly
-            svg.style.overflow = "visible";
-
-            const baseRadius = 6; // Radius of the base circle within the 24x24 viewbox
-
-            // Base Circle (drawn at the center 0,0)
-            const circle = document.createElementNS(svgNs, "circle");
-            circle.setAttribute("cx", "0");
-            circle.setAttribute("cy", "0");
-            circle.setAttribute("r", baseRadius);
-            // Apply class based on cone type for styling
-            circle.classList.add(type === ConeType.STARTING ? 'start-cone-base' : 'cone-base');
-            svg.appendChild(circle);
-
-            // Pointer Triangle (only for POINTER type)
-            if (type === ConeType.POINTER) {
-                const triangle = document.createElementNS(svgNs, "polygon");
-
-                // --- NEW LOGIC ---
-                // Triangle points outward (rightward initially) from the circle edge.
-                // Tip starts near the circle edge, base is further out.
-                const tipX = baseRadius + 1; // Start tip just outside the circle's right edge (+1 for small gap)
-                const baseMidX = tipX + POINTER_LENGTH; // Middle X-coord of the triangle's base
-                const halfWidth = POINTER_WIDTH / 2;    // Half the width of the triangle's base
-
-                // Define polygon points: "tipX,tipY baseX1,baseY1 baseX2,baseY2"
-                // Tip is at (tipX, 0)
-                // Base corners are at (baseMidX, -halfWidth) and (baseMidX, halfWidth)
-                triangle.setAttribute("points", `${tipX},0 ${baseMidX},-${halfWidth} ${baseMidX},${halfWidth}`);
-                // --- END NEW LOGIC ---
-
-                triangle.classList.add('cone-pointer'); // Apply styling class
-                svg.appendChild(triangle);
-            }
-
-             // Convert SVG DOM element to a string for use in L.divIcon html property
-             const serializer = new XMLSerializer();
-             return serializer.serializeToString(svg);
+        // ==== Leaflet Icons (with outward pointer) ====
+        const createSvgIcon = (type) => { /* ... same as final version from previous answer ... */
+            const svgNs = "http://www.w3.org/2000/svg"; const svg = document.createElementNS(svgNs, "svg");
+            svg.setAttribute("viewBox", "-12 -12 24 24"); svg.setAttribute("width", ICON_SIZE_PX); svg.setAttribute("height", ICON_SIZE_PX); svg.style.overflow = "visible";
+            const baseRadius = 6; const circle = document.createElementNS(svgNs, "circle"); circle.setAttribute("cx", "0"); circle.setAttribute("cy", "0"); circle.setAttribute("r", baseRadius);
+            circle.classList.add(type === ConeType.STARTING ? 'start-cone-base' : 'cone-base'); svg.appendChild(circle);
+            if (type === ConeType.POINTER) { const triangle = document.createElementNS(svgNs, "polygon"); const tipX = baseRadius + 1; const baseMidX = tipX + POINTER_LENGTH; const halfWidth = POINTER_WIDTH / 2; triangle.setAttribute("points", `${tipX},0 ${baseMidX},-${halfWidth} ${baseMidX},${halfWidth}`); triangle.classList.add('cone-pointer'); svg.appendChild(triangle); }
+            const serializer = new XMLSerializer(); return serializer.serializeToString(svg);
         };
+        const singleConeIcon = L.divIcon({ html: createSvgIcon(ConeType.SINGLE), className: 'cone-marker-icon', iconSize: [ICON_SIZE_PX, ICON_SIZE_PX], iconAnchor: [ICON_SIZE_PX / 2, ICON_SIZE_PX / 2] });
+        const pointerConeIcon = L.divIcon({ html: createSvgIcon(ConeType.POINTER), className: 'cone-marker-icon pointer-cone-icon', iconSize: [ICON_SIZE_PX, ICON_SIZE_PX], iconAnchor: [ICON_SIZE_PX / 2, ICON_SIZE_PX / 2] });
+        const startConeIcon = L.divIcon({ html: createSvgIcon(ConeType.STARTING), className: 'cone-marker-icon', iconSize: [ICON_SIZE_PX, ICON_SIZE_PX], iconAnchor: [ICON_SIZE_PX / 2, ICON_SIZE_PX / 2] });
 
-        const singleConeIcon = L.divIcon({
-            html: createSvgIcon(ConeType.SINGLE),
-            className: 'cone-marker-icon',
-            iconSize: [ICON_SIZE_PX, ICON_SIZE_PX], iconAnchor: [ICON_SIZE_PX / 2, ICON_SIZE_PX / 2] // Center anchor
-        });
-        const pointerConeIcon = L.divIcon({
-            html: createSvgIcon(ConeType.POINTER),
-            className: 'cone-marker-icon pointer-cone-icon',
-            iconSize: [ICON_SIZE_PX, ICON_SIZE_PX], iconAnchor: [ICON_SIZE_PX / 2, ICON_SIZE_PX / 2] // Center anchor
-        });
-        const startConeIcon = L.divIcon({
-            html: createSvgIcon(ConeType.STARTING),
-            className: 'cone-marker-icon',
-            iconSize: [ICON_SIZE_PX, ICON_SIZE_PX], iconAnchor: [ICON_SIZE_PX / 2, ICON_SIZE_PX / 2] // Center anchor
-        });
-
+        // ==== Coordinate Rotation Helper ====
+        function rotateLatLngAroundCenter(map, pointLatLng, centerLatLng, angleDegrees) {
+            if (!map || !pointLatLng || !centerLatLng || angleDegrees === 0) return pointLatLng;
+            const currentZoom = map.getZoom(); const centerPoint = map.project(centerLatLng, currentZoom); const point = map.project(pointLatLng, currentZoom);
+            const dx = point.x - centerPoint.x; const dy = point.y - centerPoint.y; const angleRad = angleDegrees * Math.PI / 180.0;
+            const cosA = Math.cos(angleRad); const sinA = Math.sin(angleRad); const rotatedDx = dx * cosA - dy * sinA; const rotatedDy = dx * sinA + dy * cosA;
+            const newPoint = L.point(centerPoint.x + rotatedDx, centerPoint.y + rotatedDy); return map.unproject(newPoint, currentZoom);
+        }
 
         // ==== Leaflet Map Initialization ====
-        function initializeMapView(centerCoords = [0, 0], zoom = INITIAL_MAP_ZOOM) {
-            // Clean up existing map if necessary
-            if (state.mapInstance) { state.mapInstance.remove(); state.mapInstance = null; }
-            if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; }
-
-            if (!mapContainer) { console.error("Map container div not found!"); return; }
-            console.log("Initializing main map view at", centerCoords, "zoom", zoom);
-
-            state.mapInstance = L.map(mapContainer, {
-                center: centerCoords, zoom: zoom,
-                zoomControl: true, // Keep zoom control
-                attributionControl: true
-            });
-
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 21, maxNativeZoom: 19,
-                attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OSM</a>'
-            }).addTo(state.mapInstance);
-
-            // Initialize Layer Group (clear if reusing)
-            if (!state.coneMarkersLayer) {
-                 state.coneMarkersLayer = L.layerGroup();
-             } else {
-                 state.coneMarkersLayer.clearLayers(); // Clear before adding to new map
-             }
-            state.coneMarkersLayer.addTo(state.mapInstance);
-
-
-            state.mapInstance.on('click', deselectCone);
-            L.control.scale({ imperial: false }).addTo(state.mapInstance);
-
-            // Redraw existing cones if any (e.g., after screen switch back)
-             state.cones.forEach((cone, index) => createOrUpdateConeMarker(cone, index));
+        function initializeMapView(centerCoords = [0, 0], zoom = INITIAL_MAP_ZOOM) { /* ... same as before, ensures layer group exists/cleared and added ... */
+            if (state.mapInstance) { state.mapInstance.remove(); state.mapInstance = null; } if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; }
+            if (!mapContainer) { console.error("Map container div not found!"); return; } console.log("Initializing main map view at", centerCoords, "zoom", zoom);
+            state.mapInstance = L.map(mapContainer, { center: centerCoords, zoom: zoom, zoomControl: true, attributionControl: true });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 21, maxNativeZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OSM</a>' }).addTo(state.mapInstance);
+            if (!state.coneMarkersLayer) state.coneMarkersLayer = L.layerGroup(); else state.coneMarkersLayer.clearLayers(); state.coneMarkersLayer.addTo(state.mapInstance);
+            state.mapInstance.on('click', deselectCone); L.control.scale({ imperial: false }).addTo(state.mapInstance); state.cones.forEach((cone, index) => createOrUpdateConeMarker(cone, index));
         }
-
-        function initializeChartView(centerCoords, zoom = INITIAL_CHART_ZOOM, cones = []) {
-             // Clean up existing map if necessary
-            if (state.mapInstance) { state.mapInstance.remove(); state.mapInstance = null; }
-            if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; }
-
-            if (!chartMapContainer) { console.error("Chart map container div not found!"); return; }
-             console.log("Initializing chart map view.");
-
-            state.chartMapInstance = L.map(chartMapContainer).setView(centerCoords, zoom);
-
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 21, maxNativeZoom: 19,
-                attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OSM</a>'
-            }).addTo(state.chartMapInstance);
-
-            // Initialize Layer Group (clear if reusing)
-            if (!state.chartMarkersLayer) {
-                 state.chartMarkersLayer = L.layerGroup();
-            } else {
-                state.chartMarkersLayer.clearLayers(); // Clear before adding to new map
-            }
-             state.chartMarkersLayer.addTo(state.chartMapInstance);
-
+        function initializeChartView(centerCoords, zoom = INITIAL_CHART_ZOOM, cones = []) { /* ... same as before, adds markers to chartMarkersLayer ... */
+             if (state.mapInstance) { state.mapInstance.remove(); state.mapInstance = null; } if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; }
+             if (!chartMapContainer) { console.error("Chart map container div not found!"); return; } console.log("Initializing chart map view.");
+             state.chartMapInstance = L.map(chartMapContainer).setView(centerCoords, zoom);
+             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 21, maxNativeZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OSM</a>' }).addTo(state.chartMapInstance);
+             if (!state.chartMarkersLayer) state.chartMarkersLayer = L.layerGroup(); else state.chartMarkersLayer.clearLayers(); state.chartMarkersLayer.addTo(state.chartMapInstance);
              L.control.scale({ imperial: false }).addTo(state.chartMapInstance);
-
-            // Add markers for the loaded chart (non-draggable)
-            cones.forEach(coneData => {
-                const cone = new Cone(coneData.latitude, coneData.longitude, coneData.type, coneData.rotation);
-                createOrUpdateConeMarker(cone, -1, false, state.chartMarkersLayer); // index -1 signifies chart view
-            });
-
-            fitMapToLayer(state.chartMarkersLayer, state.chartMapInstance, centerCoords, zoom);
-        }
-
-        // Helper to fit map bounds
-         function fitMapToLayer(layerGroup, mapInstance, fallbackCenter, fallbackZoom) {
-             if (!layerGroup || !mapInstance) return;
-             const bounds = layerGroup.getBounds();
-             if (bounds && bounds.isValid()) {
-                 mapInstance.fitBounds(bounds.pad(0.1)); // Add padding
-             } else {
-                 console.warn("Could not get valid bounds to fit map.");
-                 mapInstance.setView(fallbackCenter, fallbackZoom); // Fallback
-             }
+             cones.forEach(coneData => { const cone = new Cone(coneData.latitude, coneData.longitude, coneData.type, coneData.rotation); createOrUpdateConeMarker(cone, -1, false, state.chartMarkersLayer); });
+             fitMapToLayer(state.chartMarkersLayer, state.chartMapInstance, centerCoords, zoom);
+         }
+        function fitMapToLayer(layerGroup, mapInstance, fallbackCenter, fallbackZoom) { /* ... same as before ... */
+             if (!layerGroup || !mapInstance) return; const bounds = layerGroup.getBounds();
+             if (bounds && bounds.isValid()) mapInstance.fitBounds(bounds.pad(0.1));
+             else mapInstance.setView(fallbackCenter, fallbackZoom);
          }
 
 
-        // ==== Cone Management Functions ====
+        // ==== Cone Management Functions (with World Rotation) ====
         function createOrUpdateConeMarker(cone, index, draggable = true, layerGroup = null) {
-             // Determine target layer group based on context if not provided
-             if (!layerGroup) {
-                layerGroup = (state.currentScreen === 'mapping') ? state.coneMarkersLayer : state.chartMarkersLayer;
+            if (!layerGroup) layerGroup = (state.currentScreen === 'mapping') ? state.coneMarkersLayer : state.chartMarkersLayer;
+            if (!layerGroup || !cone) { console.error("Layer/cone missing for marker."); return; }
+            const map = (state.currentScreen === 'mapping') ? state.mapInstance : state.chartMapInstance;
+            if (!map) { console.error("Map instance missing for marker."); return; }
+
+            if (cone.leafletMarker) { try { layerGroup.removeLayer(cone.leafletMarker); } catch(e){} cone.leafletMarker = null; }
+
+            let originalLatLng = L.latLng(cone.latitude, cone.longitude);
+            let displayLatLng = originalLatLng;
+            let displayRotation = cone.rotation || 0;
+
+            // Apply World Rotation ONLY on mapping screen
+            if (state.currentScreen === 'mapping' && state.rotationCenter && state.worldRotation !== 0 && index >= 0) {
+                 const centerLatLng = L.latLng(state.rotationCenter.lat, state.rotationCenter.lng);
+                 displayLatLng = rotateLatLngAroundCenter(map, originalLatLng, centerLatLng, state.worldRotation);
+                 if (cone.type === ConeType.POINTER) displayRotation = (cone.rotation || 0) + state.worldRotation;
+                 // else { displayRotation = state.worldRotation; } // Optionally rotate non-pointer icons too
             }
 
-            if (!layerGroup || !cone) {
-                 console.error("Target layer group or cone data missing for marker creation.");
-                 return;
-             }
-
-             // Remove existing marker from the layer group if it exists
-             if (cone.leafletMarker) {
-                 layerGroup.removeLayer(cone.leafletMarker);
-                 cone.leafletMarker = null;
-             }
-
             let icon;
-            if (cone.type === ConeType.STARTING) icon = startConeIcon;
-            else if (cone.type === ConeType.POINTER) icon = pointerConeIcon;
-            else icon = singleConeIcon;
+            if (cone.type === ConeType.STARTING) icon = startConeIcon; else if (cone.type === ConeType.POINTER) icon = pointerConeIcon; else icon = singleConeIcon;
 
-            const markerOptions = {
-                icon: icon,
-                rotationOrigin: 'center center', // SVG is centered, so rotate around center
-                rotationAngle: cone.rotation || 0,
-                draggable: draggable,
-                bubblingMouseEvents: false // Prevent marker clicks from propagating to map
-            };
+            const markerOptions = { icon: icon, rotationOrigin: 'center center', rotationAngle: displayRotation, draggable: draggable, bubblingMouseEvents: false };
+            const marker = L.marker(displayLatLng, markerOptions);
+            cone.leafletMarker = marker;
 
-            // Use L.marker (rotatedMarker plugin handles rotation via options)
-            const marker = L.marker([cone.latitude, cone.longitude], markerOptions);
-            cone.leafletMarker = marker; // Store reference
-
-            // Add listeners only if it's for the interactive mapping screen (index >= 0)
-            if (index >= 0) {
-                 marker.on('click', (e) => {
-                    // Find index dynamically as it might change
-                    const currentIdx = state.cones.findIndex(c => c.id === cone.id);
-                    if (currentIdx !== -1) {
-                        selectCone(currentIdx);
-                    } else {
-                        console.warn("Clicked marker's cone not found in state array.");
-                    }
-                 });
-
-                if (draggable) {
+            if (index >= 0) { // Listeners only for mapping
+                 marker.on('click', (e) => { const currentIdx = state.cones.findIndex(c => c.id === cone.id); if (currentIdx !== -1) selectCone(currentIdx); });
+                 if (draggable) {
                      marker.on('dragend', (e) => {
-                        const draggedMarker = e.target;
-                        const latLng = draggedMarker.getLatLng();
+                        const draggedMarker = e.target; const finalLatLng = draggedMarker.getLatLng();
                         const coneIndex = state.cones.findIndex(c => c.leafletMarker === draggedMarker);
                         if (coneIndex !== -1) {
-                            state.cones[coneIndex].latitude = latLng.lat;
-                            state.cones[coneIndex].longitude = latLng.lng;
-                            updateSaveButtonState(); // Indicate change
-                        }
+                             let originalLatLng = finalLatLng;
+                             // Reverse world rotation to get stored coordinate
+                             if (state.rotationCenter && state.worldRotation !== 0) {
+                                 const centerLatLng = L.latLng(state.rotationCenter.lat, state.rotationCenter.lng);
+                                 originalLatLng = rotateLatLngAroundCenter(map, finalLatLng, centerLatLng, -state.worldRotation);
+                             }
+                             state.cones[coneIndex].latitude = originalLatLng.lat; state.cones[coneIndex].longitude = originalLatLng.lng;
+                             // Force visual update based on stored coords and current rotation
+                             createOrUpdateConeMarker(state.cones[coneIndex], coneIndex, true);
+                             console.log(`Cone ${coneIndex} dragend. Stored original @ ${originalLatLng.lat.toFixed(6)}, ${originalLatLng.lng.toFixed(6)}`);
+                             updateSaveButtonState();
+                         }
                     });
                 }
             }
-
             marker.addTo(layerGroup);
-
-            // Apply selection style if this cone is currently selected AND we are on mapping screen
-            if (index >= 0 && index === state.selectedConeIndex && marker._icon) {
-                 L.DomUtil.addClass(marker._icon, 'selected');
-             }
+            if (index >= 0 && index === state.selectedConeIndex && marker._icon) L.DomUtil.addClass(marker._icon, 'selected');
         }
 
         function tagCone() {
-            if (!state.currentLocation || !state.isGPSReady || !state.mapInstance || !state.coneMarkersLayer) {
-                 alert("GPS location not available, accuracy too low, or map not ready."); return;
-            }
+            if (!state.currentLocation || !state.isGPSReady || !state.mapInstance || !state.coneMarkersLayer) { alert("GPS/Map not ready."); return; }
             let coneType = (state.cones.length < 2) ? ConeType.STARTING : state.selectedConeType;
             let coneRotation = (coneType === ConeType.POINTER) ? state.pointerConeRotation : 0;
             const newCone = new Cone(state.currentLocation.latitude, state.currentLocation.longitude, coneType, coneRotation);
+
+            // --- Set Rotation Center on First Cone ---
+            if (state.cones.length === 0) {
+                state.rotationCenter = { lat: newCone.latitude, lng: newCone.longitude };
+                state.worldRotation = 0; // Reset world rotation
+                worldRotationSlider.value = 0; rotationValue.textContent = `0°`;
+                console.log("Rotation center set:", state.rotationCenter);
+            }
+
             state.cones.push(newCone);
             const newIndex = state.cones.length - 1;
-            createOrUpdateConeMarker(newCone, newIndex, true); // Add to map
+            createOrUpdateConeMarker(newCone, newIndex, true); // This will apply current world rotation
             updateSaveButtonState();
             if (newCone.type === ConeType.POINTER) { selectCone(newIndex); } else { deselectCone(); }
         }
 
-        function deleteLastCone() {
-            if (state.cones.length > 0 && state.coneMarkersLayer) {
-                const deletedConeIndex = state.cones.length - 1;
-                const deletedCone = state.cones.pop();
-                if (deletedCone.leafletMarker) {
-                    state.coneMarkersLayer.removeLayer(deletedCone.leafletMarker);
-                }
-                if (state.selectedConeIndex === deletedConeIndex) { deselectCone(); }
-                updateSaveButtonState();
-            }
-        }
-
-        function selectCone(index) {
-             if (index === null || index < 0 || index >= state.cones.length || state.currentScreen !== 'mapping') {
-                 deselectCone(); return;
-             }
-             const coneToSelect = state.cones[index];
-             if (!coneToSelect) return;
-
-             // Deselect previous
-             if (state.selectedConeIndex !== null && state.selectedConeIndex < state.cones.length) {
-                 const prevCone = state.cones[state.selectedConeIndex];
-                 if (prevCone?.leafletMarker?._icon) L.DomUtil.removeClass(prevCone.leafletMarker._icon, 'selected');
-             }
-
-            state.selectedConeIndex = index;
-
-            // Select new visually
-            if (coneToSelect.leafletMarker?._icon) L.DomUtil.addClass(coneToSelect.leafletMarker._icon, 'selected');
-
-            // Update UI for pointer cone rotation
-            if (coneToSelect.type === ConeType.POINTER) {
-                state.pointerConeRotation = coneToSelect.rotation;
-                pointerRotationSlider.value = coneToSelect.rotation;
-                pointerRotationValue.textContent = `${Math.round(coneToSelect.rotation)}°`;
-                pointerRotationContainer.style.display = 'flex';
-                selectedConeIndicator.style.display = 'block'; // Show indicator
-            } else {
-                pointerRotationContainer.style.display = 'none';
-                selectedConeIndicator.style.display = 'none'; // Hide indicator
-            }
-        }
-
-        function deselectCone() {
-            // Deselect previous marker visually
-             if (state.selectedConeIndex !== null && state.selectedConeIndex < state.cones.length) {
-                 const prevCone = state.cones[state.selectedConeIndex];
-                 if (prevCone?.leafletMarker?._icon) L.DomUtil.removeClass(prevCone.leafletMarker._icon, 'selected');
-             }
-            state.selectedConeIndex = null;
-            pointerRotationContainer.style.display = 'none';
-            selectedConeIndicator.style.display = 'none'; // Hide indicator
-        }
-
-         function updateSelectedConeRotation(rotation) {
+        function deleteLastCone() { /* ... same as before, removes from state.cones and state.coneMarkersLayer ... */
+            if (state.cones.length > 0 && state.coneMarkersLayer) { const deletedConeIndex = state.cones.length - 1; const deletedCone = state.cones.pop(); if (deletedCone.leafletMarker) { try {state.coneMarkersLayer.removeLayer(deletedCone.leafletMarker);} catch(e){} } if (state.selectedConeIndex === deletedConeIndex) deselectCone(); updateSaveButtonState(); }
+         }
+        function selectCone(index) { /* ... same as before, updates selection UI and state ... */
+             if (index === null || index < 0 || index >= state.cones.length || state.currentScreen !== 'mapping') { deselectCone(); return; } const coneToSelect = state.cones[index]; if (!coneToSelect) return;
+             if (state.selectedConeIndex !== null && state.selectedConeIndex < state.cones.length) { const prevCone = state.cones[state.selectedConeIndex]; if (prevCone?.leafletMarker?._icon) L.DomUtil.removeClass(prevCone.leafletMarker._icon, 'selected'); }
+             state.selectedConeIndex = index; if (coneToSelect.leafletMarker?._icon) L.DomUtil.addClass(coneToSelect.leafletMarker._icon, 'selected');
+             if (coneToSelect.type === ConeType.POINTER) { state.pointerConeRotation = coneToSelect.rotation; pointerRotationSlider.value = coneToSelect.rotation; pointerRotationValue.textContent = `${Math.round(coneToSelect.rotation)}°`; pointerRotationContainer.style.display = 'flex'; selectedConeIndicator.style.display = 'block'; } else { pointerRotationContainer.style.display = 'none'; selectedConeIndicator.style.display = 'none'; }
+         }
+        function deselectCone() { /* ... same as before, clears selection UI and state ... */
+             if (state.selectedConeIndex !== null && state.selectedConeIndex < state.cones.length) { const prevCone = state.cones[state.selectedConeIndex]; if (prevCone?.leafletMarker?._icon) L.DomUtil.removeClass(prevCone.leafletMarker._icon, 'selected'); }
+             state.selectedConeIndex = null; pointerRotationContainer.style.display = 'none'; selectedConeIndicator.style.display = 'none';
+         }
+        function updateSelectedConeRotation(rotation) { // Updates individual cone rotation
              if (state.selectedConeIndex !== null && state.cones[state.selectedConeIndex]) {
                  const cone = state.cones[state.selectedConeIndex];
                  if (cone.type === ConeType.POINTER) {
                     cone.rotation = rotation;
+                    // Update visual marker rotation (includes world rotation)
+                    let displayRotation = rotation + state.worldRotation;
                     if (cone.leafletMarker && typeof cone.leafletMarker.setRotationAngle === 'function') {
-                        cone.leafletMarker.setRotationAngle(rotation);
+                        cone.leafletMarker.setRotationAngle(displayRotation);
                     }
                     updateSaveButtonState();
                  }
             }
          }
-
         function updateSaveButtonState() { saveButton.disabled = state.cones.length === 0; }
 
         // ==== Geolocation Functions ====
-        let watchId = null;
-        let isFirstLocationUpdate = true;
-
-        function initGeolocation() {
-            if (!('geolocation' in navigator)) {
-                updateLocationStatus("BAD", "NO GPS", "Geolocation not supported"); btnTagCone.disabled = true; return;
-            }
-            if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-            updateLocationStatus("WAIT", "Requesting GPS...");
-            if (state.userLocationMarker && state.mapInstance) { state.mapInstance.removeLayer(state.userLocationMarker); state.userLocationMarker = null; }
-            state.currentLocation = null; state.isGPSReady = false; btnTagCone.disabled = true; isFirstLocationUpdate = true;
-
-            navigator.geolocation.getCurrentPosition(handleLocationUpdate, handleLocationError, { enableHighAccuracy: true, maximumAge: 60000, timeout: 10000 });
-            watchId = navigator.geolocation.watchPosition(handleLocationUpdate, handleLocationError, { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 });
-        }
-
-        function stopGeolocation() {
-            if (watchId !== null && navigator.geolocation) {
-                navigator.geolocation.clearWatch(watchId); watchId = null;
-                updateLocationStatus("BAD", "OFF", "GPS Disabled");
-                if (state.userLocationMarker && state.mapInstance) { try { state.mapInstance.removeLayer(state.userLocationMarker); } catch(e){} state.userLocationMarker = null; }
-                state.isGPSReady = false; btnTagCone.disabled = true;
-            }
-        }
-
-        function handleLocationUpdate(position) {
-            const lat = position.coords.latitude, lon = position.coords.longitude, accuracy = position.coords.accuracy;
-            state.currentLocation = { latitude: lat, longitude: lon, accuracy: accuracy };
-            state.isGPSReady = accuracy <= state.gpsAccuracyThreshold;
-            const statusText = `Lat:${lat.toFixed(6)}, Lon:${lon.toFixed(6)} | Acc:${accuracy.toFixed(1)}m`;
-            updateLocationStatus(state.isGPSReady ? "GOOD" : "BAD", state.isGPSReady ? "OK" : "ACC POOR", statusText);
-            btnTagCone.disabled = !state.isGPSReady;
-
-            if (state.mapInstance && state.currentScreen === 'mapping') {
-                 const currentLatLng = L.latLng(lat, lon);
-                 if (isFirstLocationUpdate && state.isGPSReady) {
-                     console.log("First good GPS fix, centering map.");
-                     state.mapInstance.setView(currentLatLng, state.mapInstance.getZoom() || INITIAL_MAP_ZOOM);
-                     isFirstLocationUpdate = false;
-                 }
-                 // Update accuracy circle marker
-                 if (!state.userLocationMarker) {
-                     state.userLocationMarker = L.layerGroup([ // Group circle + center dot
-                         L.circle(currentLatLng, { radius: accuracy, color: 'blue', fillColor: '#30f', fillOpacity: 0.10, weight: 1, interactive: false }),
-                         L.circleMarker(currentLatLng, { radius: 4, color: 'white', fillColor: 'blue', fillOpacity: 1, weight: 1, interactive: false})
-                     ]).addTo(state.mapInstance);
-                 } else {
-                      const layers = state.userLocationMarker.getLayers();
-                      if (layers.length === 2) {
-                          layers[0].setLatLng(currentLatLng).setRadius(accuracy); // Update circle
-                          layers[1].setLatLng(currentLatLng); // Update center dot
-                      }
-                 }
-            } else if (!state.mapInstance && state.currentScreen === 'mapping' && state.isGPSReady) {
-                 // GPS ready before map, initialize map now
-                 initializeMapView([lat, lon]);
-            }
-        }
-
-        function handleLocationError(error) {
-            console.error('Geolocation Error:', error.code, error.message);
-            let msg='GPS Error', lbl="ERROR"; /* ... error messages ... */
-             switch(error.code) { case 1: msg="GPS Permission Denied"; lbl="DENIED"; break; case 2: msg="GPS Position Unavailable"; lbl="UNAVAIL"; break; case 3: msg="GPS Timeout"; lbl="TIMEOUT"; break; }
-            updateLocationStatus("BAD", lbl, msg);
-            state.currentLocation = null; state.isGPSReady = false; btnTagCone.disabled = true;
-            if (state.userLocationMarker && state.mapInstance) { try { state.mapInstance.removeLayer(state.userLocationMarker); } catch(e){} state.userLocationMarker = null; }
-        }
-
+        // ... handleLocationUpdate and handleLocationError remain the same, updating state.currentLocation and map view/marker ...
+        let watchId = null; let isFirstLocationUpdate = true;
+        function initGeolocation() { /* ... same as before ... */
+            if (!('geolocation' in navigator)) { updateLocationStatus("BAD", "NO GPS", "Geolocation not supported"); btnTagCone.disabled = true; return; } if (watchId !== null) navigator.geolocation.clearWatch(watchId); updateLocationStatus("WAIT", "Requesting GPS..."); if (state.userLocationMarker && state.mapInstance) { try { state.mapInstance.removeLayer(state.userLocationMarker); } catch(e){} state.userLocationMarker = null; } state.currentLocation = null; state.isGPSReady = false; btnTagCone.disabled = true; isFirstLocationUpdate = true; navigator.geolocation.getCurrentPosition(handleLocationUpdate, handleLocationError, { enableHighAccuracy: true, maximumAge: 60000, timeout: 10000 }); watchId = navigator.geolocation.watchPosition(handleLocationUpdate, handleLocationError, { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 });
+         }
+        function stopGeolocation() { /* ... same as before ... */
+            if (watchId !== null && navigator.geolocation) { navigator.geolocation.clearWatch(watchId); watchId = null; updateLocationStatus("BAD", "OFF", "GPS Disabled"); if (state.userLocationMarker && state.mapInstance) { try { state.mapInstance.removeLayer(state.userLocationMarker); } catch(e){} state.userLocationMarker = null; } state.isGPSReady = false; btnTagCone.disabled = true; }
+         }
+        function handleLocationUpdate(position) { /* ... same as before ... */
+            const lat = position.coords.latitude, lon = position.coords.longitude, accuracy = position.coords.accuracy; state.currentLocation = { latitude: lat, longitude: lon, accuracy: accuracy }; state.isGPSReady = accuracy <= state.gpsAccuracyThreshold; const statusText = `Lat:${lat.toFixed(6)}, Lon:${lon.toFixed(6)} | Acc:${accuracy.toFixed(1)}m`; updateLocationStatus(state.isGPSReady ? "GOOD" : "BAD", state.isGPSReady ? "OK" : "ACC POOR", statusText); btnTagCone.disabled = !state.isGPSReady;
+            if (state.mapInstance && state.currentScreen === 'mapping') { const currentLatLng = L.latLng(lat, lon); if (isFirstLocationUpdate && state.isGPSReady) { console.log("First good GPS fix, centering map."); state.mapInstance.setView(currentLatLng, state.mapInstance.getZoom() || INITIAL_MAP_ZOOM); isFirstLocationUpdate = false; } if (!state.userLocationMarker) { state.userLocationMarker = L.layerGroup([ L.circle(currentLatLng, { radius: accuracy, color: 'blue', fillColor: '#30f', fillOpacity: 0.10, weight: 1, interactive: false }), L.circleMarker(currentLatLng, { radius: 4, color: 'white', fillColor: 'blue', fillOpacity: 1, weight: 1, interactive: false}) ]).addTo(state.mapInstance); } else { const layers = state.userLocationMarker.getLayers(); if (layers.length === 2) { layers[0].setLatLng(currentLatLng).setRadius(accuracy); layers[1].setLatLng(currentLatLng); } } } else if (!state.mapInstance && state.currentScreen === 'mapping' && state.isGPSReady) { initializeMapView([lat, lon]); }
+         }
+        function handleLocationError(error) { /* ... same as before ... */
+            console.error('Geolocation Error:', error.code, error.message); let msg='GPS Error', lbl="ERROR"; switch(error.code) { case 1: msg="GPS Permission Denied"; lbl="DENIED"; break; case 2: msg="GPS Position Unavailable"; lbl="UNAVAIL"; break; case 3: msg="GPS Timeout"; lbl="TIMEOUT"; break; } updateLocationStatus("BAD", lbl, msg); state.currentLocation = null; state.isGPSReady = false; btnTagCone.disabled = true; if (state.userLocationMarker && state.mapInstance) { try { state.mapInstance.removeLayer(state.userLocationMarker); } catch(e){} state.userLocationMarker = null; }
+         }
         function updateLocationStatus(type, label, info) { locationInfo.innerHTML = `${info} <span id="accuracy-status" class="status-pill status-${type.toLowerCase()}">${label}</span>`; }
 
-        // ==== Storage Functions ==== (Largely unchanged, ensure only core data is saved/loaded)
-        const STORAGE_KEY = 'autocrossCharts_v3'; // Increment version due to icon change (though data format is same)
-
-        function saveCurrentChart(name) { /* ... same as before, ensuring leafletMarker isn't saved ... */
-            if (state.cones.length === 0) { alert('No cones to save!'); return false; }
-            const serializableCones = state.cones.map(c => ({ latitude: c.latitude, longitude: c.longitude, type: c.type, rotation: c.rotation, id: c.id }));
-            const chartData = { name: name, coneData: serializableCones, createdAt: new Date().toISOString() };
-            loadSavedCharts();
-            const existingIndex = state.savedCharts.findIndex(c => c.name === name);
-            if (existingIndex !== -1) state.savedCharts.splice(existingIndex, 1);
-            state.savedCharts.push(chartData);
-            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedCharts)); alert(`Chart "${name}" saved.`); return true; }
-            catch (e) { console.error("Save Error:", e); alert("Error saving chart."); loadSavedCharts(); return false; }
-        }
-        function loadSavedCharts() { /* ... same as before ... */
-             try { const stored = localStorage.getItem(STORAGE_KEY); state.savedCharts = stored ? JSON.parse(stored) : []; if (!Array.isArray(state.savedCharts)) { state.savedCharts = []; localStorage.removeItem(STORAGE_KEY); } }
-             catch (e) { console.error("Load Error:", e); state.savedCharts = []; } return state.savedCharts;
-         }
-        function deleteChart(name) { /* ... same as before ... */
-            if (!confirm(`Delete chart "${name}"?`)) return; loadSavedCharts();
-            state.savedCharts = state.savedCharts.filter(c => c.name !== name);
-            try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedCharts)); updateChartsList(); }
-            catch (e) { console.error("Delete Error:", e); alert("Error deleting."); loadSavedCharts(); }
-        }
-        function deleteAllCharts() { /* ... same as before ... */
-             if (state.savedCharts.length === 0 || !confirm("Delete ALL charts?")) return;
-             state.savedCharts = []; try { localStorage.removeItem(STORAGE_KEY); updateChartsList(); }
-             catch (e) { console.error("Delete All Error:", e); alert("Error clearing charts."); loadSavedCharts(); }
-         }
-        function exportChart(chart) { /* ... same as before, exporting coneData array ... */
-             if (!chart) return; try { const exportData = { name: chart.name, coneData: chart.coneData.map(c => ({ latitude: c.latitude, longitude: c.longitude, type: c.type, rotation: c.rotation, id: c.id })), createdAt: chart.createdAt }; const json = JSON.stringify(exportData, null, 2); const blob = new Blob([json], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); const filename = chart.name.replace(/[^a-z0-9_ -]/gi, '_').replace(/\s+/g, '_'); a.href = url; a.download = `${filename || 'autocross_chart'}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 100); } catch (e) { console.error("Export Error:", e); alert("Could not export."); }
-         }
-        function importChartFromFile(file) { /* ... same validation as before ... */
-            const reader = new FileReader(); reader.onload = (e) => { try { const imported = JSON.parse(e.target.result); if (typeof imported !== 'object' || !imported.name || !Array.isArray(imported.coneData)) throw new Error("Invalid format."); /* basic cone validation */ for(const c of imported.coneData) { if (typeof c.latitude !== 'number' || typeof c.longitude !== 'number' || typeof c.type !== 'string') throw new Error("Invalid cone data."); c.rotation = c.rotation || 0; } loadSavedCharts(); const existing = state.savedCharts.find(c => c.name === imported.name); if (existing && !confirm(`Overwrite chart "${imported.name}"?`)) { importFileInput.value = ''; return; } state.savedCharts = state.savedCharts.filter(c => c.name !== imported.name); const newChart = { name: imported.name, coneData: imported.coneData, createdAt: imported.createdAt || new Date().toISOString() }; state.savedCharts.push(newChart); localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedCharts)); alert(`Chart "${newChart.name}" imported.`); if(state.currentScreen === 'savedCharts') updateChartsList(); } catch (error) { console.error("Import Error:", error); alert('Error importing: ' + error.message); } finally { importFileInput.value = ''; } }; reader.onerror = () => { alert('Error reading file.'); importFileInput.value = ''; }; reader.readAsText(file);
-        }
+        // ==== Storage Functions ====
+        // ... saveCurrentChart, loadSavedCharts, deleteChart, deleteAllCharts, exportChart, importChartFromFile ...
+        // ... remain the same, operating on the core cone data (lat, lon, type, rotation, id) ...
+        const STORAGE_KEY = 'autocrossCharts_v4'; // Version bump for rotation logic change
+        function saveCurrentChart(name) { /* ... same ... */ if (state.cones.length === 0) { alert('No cones to save!'); return false; } const serializableCones = state.cones.map(c => ({ latitude: c.latitude, longitude: c.longitude, type: c.type, rotation: c.rotation, id: c.id })); const chartData = { name: name, coneData: serializableCones, createdAt: new Date().toISOString() }; loadSavedCharts(); const existingIndex = state.savedCharts.findIndex(c => c.name === name); if (existingIndex !== -1) state.savedCharts.splice(existingIndex, 1); state.savedCharts.push(chartData); try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedCharts)); alert(`Chart "${name}" saved.`); return true; } catch (e) { console.error("Save Error:", e); alert("Error saving chart."); loadSavedCharts(); return false; } }
+        function loadSavedCharts() { /* ... same ... */ try { const stored = localStorage.getItem(STORAGE_KEY); state.savedCharts = stored ? JSON.parse(stored) : []; if (!Array.isArray(state.savedCharts)) { state.savedCharts = []; localStorage.removeItem(STORAGE_KEY); } } catch (e) { console.error("Load Error:", e); state.savedCharts = []; } return state.savedCharts; }
+        function deleteChart(name) { /* ... same ... */ if (!confirm(`Delete chart "${name}"?`)) return; loadSavedCharts(); state.savedCharts = state.savedCharts.filter(c => c.name !== name); try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedCharts)); updateChartsList(); } catch (e) { console.error("Delete Error:", e); alert("Error deleting."); loadSavedCharts(); } }
+        function deleteAllCharts() { /* ... same ... */ if (state.savedCharts.length === 0 || !confirm("Delete ALL charts?")) return; state.savedCharts = []; try { localStorage.removeItem(STORAGE_KEY); updateChartsList(); } catch (e) { console.error("Delete All Error:", e); alert("Error clearing charts."); loadSavedCharts(); } }
+        function exportChart(chart) { /* ... same ... */ if (!chart) return; try { const exportData = { name: chart.name, coneData: chart.coneData.map(c => ({ latitude: c.latitude, longitude: c.longitude, type: c.type, rotation: c.rotation, id: c.id })), createdAt: chart.createdAt }; const json = JSON.stringify(exportData, null, 2); const blob = new Blob([json], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); const filename = chart.name.replace(/[^a-z0-9_ -]/gi, '_').replace(/\s+/g, '_'); a.href = url; a.download = `${filename || 'autocross_chart'}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 100); } catch (e) { console.error("Export Error:", e); alert("Could not export."); } }
+        function importChartFromFile(file) { /* ... same ... */ const reader = new FileReader(); reader.onload = (e) => { try { const imported = JSON.parse(e.target.result); if (typeof imported !== 'object' || !imported.name || !Array.isArray(imported.coneData)) throw new Error("Invalid format."); for(const c of imported.coneData) { if (typeof c.latitude !== 'number' || typeof c.longitude !== 'number' || typeof c.type !== 'string') throw new Error("Invalid cone data."); c.rotation = c.rotation || 0; } loadSavedCharts(); const existing = state.savedCharts.find(c => c.name === imported.name); if (existing && !confirm(`Overwrite chart "${imported.name}"?`)) { importFileInput.value = ''; return; } state.savedCharts = state.savedCharts.filter(c => c.name !== imported.name); const newChart = { name: imported.name, coneData: imported.coneData, createdAt: imported.createdAt || new Date().toISOString() }; state.savedCharts.push(newChart); localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedCharts)); alert(`Chart "${newChart.name}" imported.`); if(state.currentScreen === 'savedCharts') updateChartsList(); } catch (error) { console.error("Import Error:", error); alert('Error importing: ' + error.message); } finally { importFileInput.value = ''; } }; reader.onerror = () => { alert('Error reading file.'); importFileInput.value = ''; }; reader.readAsText(file); }
         function triggerImport() { importFileInput.click(); }
-        function updateChartsList() { /* ... same as before ... */
-            loadSavedCharts(); if (state.savedCharts.length === 0) { noChartsMessage.style.display = 'block'; chartsList.style.display = 'none'; chartsList.innerHTML = ''; } else { noChartsMessage.style.display = 'none'; chartsList.style.display = 'block'; chartsList.innerHTML = ''; const sorted = [...state.savedCharts].sort((a, b) => (b.createdAt || 0).localeCompare(a.createdAt || 0)); sorted.forEach(chart => { const li = document.createElement('li'); li.className = 'chart-item'; const nameSpan = document.createElement('span'); nameSpan.className = 'chart-item-name'; nameSpan.textContent = chart.name; const detailsSpan = document.createElement('span'); detailsSpan.className = 'chart-item-details'; let dateStr = 'Unknown date'; if (chart.createdAt) try { dateStr = new Date(chart.createdAt).toLocaleDateString(); } catch (e) {} const coneCount = Array.isArray(chart.coneData) ? chart.coneData.length : 0; detailsSpan.textContent = `${coneCount} cones (${dateStr})`; const deleteBtn = document.createElement('button'); deleteBtn.className = 'danger'; deleteBtn.textContent = 'Del'; deleteBtn.onclick = (ev) => { ev.stopPropagation(); deleteChart(chart.name); }; li.appendChild(nameSpan); li.appendChild(detailsSpan); li.appendChild(deleteBtn); li.addEventListener('click', () => viewChart(chart)); chartsList.appendChild(li); }); }
-        }
-        function viewChart(chart) { /* ... same as before, triggers navigation ... */
-            if (!chart || !Array.isArray(chart.coneData)) { alert("Invalid chart data."); return; }
-            state.currentViewingChart = chart; chartName.textContent = chart.name;
-            navigateToScreen('chartView'); // Navigation handles map init
-        }
-        function generateChartName() { /* ... same as before ... */
-            const n=new Date(), d=n.toISOString().split('T')[0], t=n.toTimeString().split(' ')[0].replace(/:/g,'-'); return `Chart_${d}_${t}`;
-        }
+        function updateChartsList() { /* ... same ... */ loadSavedCharts(); if (state.savedCharts.length === 0) { noChartsMessage.style.display = 'block'; chartsList.style.display = 'none'; chartsList.innerHTML = ''; } else { noChartsMessage.style.display = 'none'; chartsList.style.display = 'block'; chartsList.innerHTML = ''; const sorted = [...state.savedCharts].sort((a, b) => (b.createdAt || 0).localeCompare(a.createdAt || 0)); sorted.forEach(chart => { const li = document.createElement('li'); li.className = 'chart-item'; const nameSpan = document.createElement('span'); nameSpan.className = 'chart-item-name'; nameSpan.textContent = chart.name; const detailsSpan = document.createElement('span'); detailsSpan.className = 'chart-item-details'; let dateStr = 'Unknown date'; if (chart.createdAt) try { dateStr = new Date(chart.createdAt).toLocaleDateString(); } catch (e) {} const coneCount = Array.isArray(chart.coneData) ? chart.coneData.length : 0; detailsSpan.textContent = `${coneCount} cones (${dateStr})`; const deleteBtn = document.createElement('button'); deleteBtn.className = 'danger'; deleteBtn.textContent = 'Del'; deleteBtn.onclick = (ev) => { ev.stopPropagation(); deleteChart(chart.name); }; li.appendChild(nameSpan); li.appendChild(detailsSpan); li.appendChild(deleteBtn); li.addEventListener('click', () => viewChart(chart)); chartsList.appendChild(li); }); } }
+        function viewChart(chart) { /* ... same ... */ if (!chart || !Array.isArray(chart.coneData)) { alert("Invalid chart data."); return; } state.currentViewingChart = chart; chartName.textContent = chart.name; navigateToScreen('chartView'); }
+        function generateChartName() { /* ... same ... */ const n=new Date(), d=n.toISOString().split('T')[0], t=n.toTimeString().split(' ')[0].replace(/:/g,'-'); return `Chart_${d}_${t}`; }
 
         // ==== Navigation ====
-        function navigateToScreen(screenId) {
-            console.log(`Navigating to: ${screenId}`);
-            const oldScreen = state.currentScreen;
-            if (oldScreen === screenId) return; // Avoid redundant navigation
-
-            // Stop processes from previous screen
-            if (oldScreen === 'mapping') stopGeolocation();
-
-            // Hide all screens
-            Object.values(screens).forEach(screen => screen.classList.remove('active'));
-
-            // Activate target screen
+        function navigateToScreen(screenId) { /* ... updated to reset rotation state for mapping ... */
+             console.log(`Navigating to: ${screenId}`); const oldScreen = state.currentScreen; if (oldScreen === screenId) return;
+             if (oldScreen === 'mapping') stopGeolocation(); Object.values(screens).forEach(screen => screen.classList.remove('active'));
              if (screens[screenId]) {
-                 screens[screenId].classList.add('active');
-                 state.currentScreen = screenId;
-
-                // Screen Specific Setup
-                switch(screenId) {
-                    case 'mapping':
-                        state.cones = []; // Start fresh cone list
-                        state.selectedConeIndex = null; deselectCone(); // Reset selection UI
-                        const startCoords = state.currentLocation ? [state.currentLocation.latitude, state.currentLocation.longitude] : [0, 0];
-                        initializeMapView(startCoords); // Init/Re-init map FIRST
-                        updateSaveButtonState();
-                        initGeolocation(); // Start GPS AFTER map is ready
-                        break;
-                    case 'savedCharts':
-                        // Ensure maps are removed if navigating here
-                         if (state.mapInstance) { state.mapInstance.remove(); state.mapInstance = null; }
-                         if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; }
-                        updateChartsList();
-                        break;
-                    case 'chartView':
-                         if (!state.currentViewingChart) { navigateToScreen('savedCharts'); return; }
-                         let centerCoords = [0, 0]; const cones = state.currentViewingChart.coneData;
-                         if (cones.length > 0) centerCoords = [cones[0].latitude, cones[0].longitude];
-                         initializeChartView(centerCoords, INITIAL_CHART_ZOOM, cones); // Init chart map
-                         break;
-                    case 'mainMenu':
-                         state.currentViewingChart = null; state.cones = []; // Clear mapping state
-                         if (state.mapInstance) { state.mapInstance.remove(); state.mapInstance = null; }
-                         if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; }
-                         break;
+                 screens[screenId].classList.add('active'); state.currentScreen = screenId;
+                 switch(screenId) {
+                     case 'mapping':
+                         state.cones = []; state.selectedConeIndex = null; deselectCone();
+                         // --- Reset Rotation State ---
+                         state.rotationCenter = null; state.worldRotation = 0;
+                         worldRotationSlider.value = 0; rotationValue.textContent = `0°`;
+                         // --- End Reset ---
+                         const startCoords = state.currentLocation ? [state.currentLocation.latitude, state.currentLocation.longitude] : [0, 0];
+                         initializeMapView(startCoords); updateSaveButtonState(); initGeolocation(); break;
+                     case 'savedCharts': /* ... same ... */ if (state.mapInstance) { state.mapInstance.remove(); state.mapInstance = null; } if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; } updateChartsList(); break;
+                     case 'chartView': /* ... same ... */ if (!state.currentViewingChart) { navigateToScreen('savedCharts'); return; } let centerCoords = [0, 0]; const cones = state.currentViewingChart.coneData; if (cones.length > 0) centerCoords = [cones[0].latitude, cones[0].longitude]; initializeChartView(centerCoords, INITIAL_CHART_ZOOM, cones); break;
+                     case 'mainMenu': /* ... same ... */ state.currentViewingChart = null; state.cones = []; if (state.mapInstance) { state.mapInstance.remove(); state.mapInstance = null; } if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; } break;
                  }
-
-                // Invalidate map size after screen transition AND a short delay for rendering
-                setTimeout(() => {
-                    let mapToUpdate = null;
-                    if (screenId === 'mapping' && state.mapInstance) mapToUpdate = state.mapInstance;
-                    else if (screenId === 'chartView' && state.chartMapInstance) mapToUpdate = state.chartMapInstance;
-
-                    if (mapToUpdate) {
-                         console.log(`Invalidating size for ${screenId} map`);
-                         mapToUpdate.invalidateSize({ animate: false }); // Invalidate size
-
-                         // For chart view, re-fit bounds after invalidation if needed
-                         if (screenId === 'chartView' && state.chartMarkersLayer) {
-                             fitMapToLayer(state.chartMarkersLayer, mapToUpdate, [0,0], INITIAL_CHART_ZOOM);
-                         }
-                    }
-                }, 150); // Delay might need adjustment based on device performance
-
-            } else { console.error("Screen ID not found:", screenId); }
-        }
+                 setTimeout(() => { /* ... invalidateSize logic same ... */ let mapToUpdate = null; if (screenId === 'mapping' && state.mapInstance) mapToUpdate = state.mapInstance; else if (screenId === 'chartView' && state.chartMapInstance) mapToUpdate = state.chartMapInstance; if (mapToUpdate) { console.log(`Invalidating size for ${screenId} map`); mapToUpdate.invalidateSize({ animate: false }); if (screenId === 'chartView' && state.chartMarkersLayer) fitMapToLayer(state.chartMarkersLayer, mapToUpdate, [0,0], INITIAL_CHART_ZOOM); } }, 150);
+             } else { console.error("Screen ID not found:", screenId); }
+         }
 
         // ==== Event Handlers ====
-        // -- Button Clicks -- (Setup event listeners as before)
-        newChartButton.addEventListener('click', () => navigateToScreen('mapping'));
-        savedChartsButton.addEventListener('click', () => navigateToScreen('savedCharts'));
-        backToMainButton.addEventListener('click', () => navigateToScreen('mainMenu'));
-        backFromChartsButton.addEventListener('click', () => navigateToScreen('mainMenu'));
-        backFromChartViewButton.addEventListener('click', () => navigateToScreen('savedCharts'));
-        btnPointerCone.addEventListener('click', () => { state.selectedConeType = ConeType.POINTER; btnPointerCone.classList.add('active'); btnSingleCone.classList.remove('active'); });
-        btnSingleCone.addEventListener('click', () => { state.selectedConeType = ConeType.SINGLE; btnSingleCone.classList.add('active'); btnPointerCone.classList.remove('active'); });
-        btnTagCone.addEventListener('click', tagCone);
-        btnDeleteLastCone.addEventListener('click', deleteLastCone);
-        saveButton.addEventListener('click', () => { if (state.cones.length > 0) { chartNameInput.value = generateChartName(); modal.style.display = 'flex'; } });
-        deleteAllChartsButton.addEventListener('click', deleteAllCharts);
-        importChartButtonMain.addEventListener('click', triggerImport); importChartButtonSaved.addEventListener('click', triggerImport);
-        importFileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) importChartFromFile(e.target.files[0]); });
-        exportCurrentChartButton.addEventListener('click', () => exportChart(state.currentViewingChart));
+        // -- Button Clicks --
+        newChartButton.addEventListener('click', () => navigateToScreen('mapping')); savedChartsButton.addEventListener('click', () => navigateToScreen('savedCharts')); backToMainButton.addEventListener('click', () => navigateToScreen('mainMenu')); backFromChartsButton.addEventListener('click', () => navigateToScreen('mainMenu')); backFromChartViewButton.addEventListener('click', () => navigateToScreen('savedCharts')); btnPointerCone.addEventListener('click', () => { state.selectedConeType = ConeType.POINTER; btnPointerCone.classList.add('active'); btnSingleCone.classList.remove('active'); }); btnSingleCone.addEventListener('click', () => { state.selectedConeType = ConeType.SINGLE; btnSingleCone.classList.add('active'); btnPointerCone.classList.remove('active'); }); btnTagCone.addEventListener('click', tagCone); btnDeleteLastCone.addEventListener('click', deleteLastCone); saveButton.addEventListener('click', () => { if (state.cones.length > 0) { chartNameInput.value = generateChartName(); modal.style.display = 'flex'; } }); deleteAllChartsButton.addEventListener('click', deleteAllCharts); importChartButtonMain.addEventListener('click', triggerImport); importChartButtonSaved.addEventListener('click', triggerImport); importFileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) importChartFromFile(e.target.files[0]); }); exportCurrentChartButton.addEventListener('click', () => exportChart(state.currentViewingChart));
         // -- Slider Inputs --
         accuracyThresholdSlider.addEventListener('input', () => { state.gpsAccuracyThreshold = parseFloat(accuracyThresholdSlider.value); accuracyThresholdValue.textContent = `${state.gpsAccuracyThreshold.toFixed(1)} m`; if (state.currentLocation) handleLocationUpdate({ coords: state.currentLocation }); });
         pointerRotationSlider.addEventListener('input', () => { const r = parseFloat(pointerRotationSlider.value); state.pointerConeRotation = r; pointerRotationValue.textContent = `${Math.round(r)}°`; updateSelectedConeRotation(r); });
+        worldRotationSlider.addEventListener('input', () => { // <-- Listener for World Rotation
+            if (state.currentScreen !== 'mapping' || !state.rotationCenter || !state.mapInstance) return;
+            state.worldRotation = parseFloat(worldRotationSlider.value); rotationValue.textContent = `${Math.round(state.worldRotation)}°`;
+            // Update all cone marker visuals without recreating them
+            state.cones.forEach(cone => {
+                 if (cone.leafletMarker) {
+                     let displayLatLng = L.latLng(cone.latitude, cone.longitude);
+                     let displayRotation = cone.rotation || 0;
+                     const centerLatLng = L.latLng(state.rotationCenter.lat, state.rotationCenter.lng);
+                     displayLatLng = rotateLatLngAroundCenter(state.mapInstance, displayLatLng, centerLatLng, state.worldRotation);
+                     if (cone.type === ConeType.POINTER) displayRotation = (cone.rotation || 0) + state.worldRotation;
+                     // else { displayRotation = state.worldRotation; } // Optionally rotate non-pointers
+
+                     cone.leafletMarker.setLatLng(displayLatLng);
+                     if (typeof cone.leafletMarker.setRotationAngle === 'function') {
+                         cone.leafletMarker.setRotationAngle(displayRotation);
+                     }
+                 }
+             });
+        });
         // -- Modal Actions --
         confirmSaveButton.addEventListener('click', () => { const name = chartNameInput.value.trim(); if (!name) { alert('Enter chart name.'); return; } loadSavedCharts(); const existing = state.savedCharts.find(c => c.name === name); if (existing && !confirm(`Overwrite chart "${name}"?`)) return; if (saveCurrentChart(name)) modal.style.display = 'none'; });
         cancelSaveButton.addEventListener('click', () => { modal.style.display = 'none'; });
 
         // ==== Initialization ====
-        function initApp() {
-             console.log("Autocross Mapper Initializing (Leaflet v2)...");
-             loadSavedCharts();
-             navigateToScreen('mainMenu'); // Start at main menu
-             window.addEventListener('resize', () => { // Handle window resize
-                  setTimeout(() => {
-                      const currentMap = (state.currentScreen === 'mapping') ? state.mapInstance : ((state.currentScreen === 'chartView') ? state.chartMapInstance : null);
-                      if (currentMap) currentMap.invalidateSize({animate: false});
-                  }, 250);
-              });
-            console.log("Autocross Mapper Initialized.");
-        }
+        function initApp() { /* ... same as before ... */
+             console.log("Autocross Mapper Initializing (Leaflet + World Rotation Workaround)..."); loadSavedCharts(); navigateToScreen('mainMenu'); window.addEventListener('resize', () => { setTimeout(() => { const currentMap = (state.currentScreen === 'mapping') ? state.mapInstance : ((state.currentScreen === 'chartView') ? state.chartMapInstance : null); if (currentMap) currentMap.invalidateSize({animate: false}); }, 250); }); console.log("Autocross Mapper Initialized.");
+         }
         window.addEventListener('load', initApp);
 
     </script>
