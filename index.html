@@ -344,35 +344,47 @@
         const createSvgIcon = (type) => {
             const svgNs = "http://www.w3.org/2000/svg";
             const svg = document.createElementNS(svgNs, "svg");
-            svg.setAttribute("viewBox", "-12 -12 24 24"); // Centered viewbox
+            // Centered viewbox allows drawing around (0,0) easily
+            // Extends from -12 to +12 horizontally and vertically (total 24 units)
+            svg.setAttribute("viewBox", "-12 -12 24 24");
             svg.setAttribute("width", ICON_SIZE_PX);
             svg.setAttribute("height", ICON_SIZE_PX);
+            // Add overflow visible to ensure pointer isn't clipped if it extends slightly
+            svg.style.overflow = "visible";
 
-            const baseRadius = 6; // Radius of the base circle
+            const baseRadius = 6; // Radius of the base circle within the 24x24 viewbox
 
-            // Base Circle
+            // Base Circle (drawn at the center 0,0)
             const circle = document.createElementNS(svgNs, "circle");
             circle.setAttribute("cx", "0");
             circle.setAttribute("cy", "0");
             circle.setAttribute("r", baseRadius);
+            // Apply class based on cone type for styling
             circle.classList.add(type === ConeType.STARTING ? 'start-cone-base' : 'cone-base');
             svg.appendChild(circle);
 
             // Pointer Triangle (only for POINTER type)
             if (type === ConeType.POINTER) {
                 const triangle = document.createElementNS(svgNs, "polygon");
-                // Points define triangle pointing RIGHT from center (rotation handled by Leaflet)
-                // Tip X = radius + length, Base X = radius
-                const tipX = baseRadius + POINTER_LENGTH;
-                const baseX = baseRadius;
-                const halfWidth = POINTER_WIDTH / 2;
-                 // Format: "tipX,0 baseX,-halfWidth baseX,halfWidth"
-                triangle.setAttribute("points", `${tipX},0 ${baseX},-${halfWidth} ${baseX},${halfWidth}`);
-                triangle.classList.add('cone-pointer');
+
+                // --- NEW LOGIC ---
+                // Triangle points outward (rightward initially) from the circle edge.
+                // Tip starts near the circle edge, base is further out.
+                const tipX = baseRadius + 1; // Start tip just outside the circle's right edge (+1 for small gap)
+                const baseMidX = tipX + POINTER_LENGTH; // Middle X-coord of the triangle's base
+                const halfWidth = POINTER_WIDTH / 2;    // Half the width of the triangle's base
+
+                // Define polygon points: "tipX,tipY baseX1,baseY1 baseX2,baseY2"
+                // Tip is at (tipX, 0)
+                // Base corners are at (baseMidX, -halfWidth) and (baseMidX, halfWidth)
+                triangle.setAttribute("points", `${tipX},0 ${baseMidX},-${halfWidth} ${baseMidX},${halfWidth}`);
+                // --- END NEW LOGIC ---
+
+                triangle.classList.add('cone-pointer'); // Apply styling class
                 svg.appendChild(triangle);
             }
 
-             // Convert SVG to string to use in divIcon
+             // Convert SVG DOM element to a string for use in L.divIcon html property
              const serializer = new XMLSerializer();
              return serializer.serializeToString(svg);
         };
