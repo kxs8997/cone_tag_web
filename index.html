@@ -2,57 +2,34 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- Viewport meta tag for responsiveness -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Autocross Mapper</title>
+    <title>Autocross Mapper (Leaflet)</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+
+    <!-- Leaflet Rotated Marker Plugin -->
+    <script src="https://unpkg.com/leaflet-rotatedmarker@0.2.0/leaflet.rotatedMarker.js"></script>
+
     <style>
         /* Basic Reset & Box Sizing */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        /* Ensure HTML and Body take full space */
-        html, body {
-            width: 100%;
-            height: 100%;
-            overflow: hidden; /* Prevent extra scrollbars on body */
-            font-family: Arial, sans-serif;
-            background-color: #000;
-            color: #fff;
-        }
-
-        /* Prevent text selection on UI elements */
-        .noselect {
-            -webkit-touch-callout: none; /* iOS Safari */
-            -webkit-user-select: none; /* Safari */
-            -khtml-user-select: none; /* Konqueror HTML */
-            -moz-user-select: none; /* Old versions of Firefox */
-            -ms-user-select: none; /* Internet Explorer/Edge */
-            user-select: none; /* Non-prefixed version, currently supported by Chrome, Edge, Opera and Firefox */
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; font-family: Arial, sans-serif; background-color: #000; color: #fff; }
+        .noselect { -webkit-touch-callout: none; -webkit-user-select: none; -khtml-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; }
 
         /* Screen Management */
-        .screen {
-            display: none; /* Hidden by default */
-            width: 100%;
-            height: 100%;
-            overflow: hidden; /* Prevent content spillover */
-            flex-direction: column; /* Most screens use flex column */
-        }
+        .screen { display: none; width: 100%; height: 100%; overflow: hidden; flex-direction: column; }
+        .screen.active { display: flex; }
 
-        .screen.active {
-            display: flex; /* Show active screen */
-        }
-
-        /* Main App Container (used within screens) */
-        #app {
-            display: flex;
-            flex-direction: column;
-            height: 100%; /* Fill parent screen */
-            width: 100%;
-        }
+        /* Main App Container */
+        #app { display: flex; flex-direction: column; height: 100%; width: 100%; }
 
         /* Header Styles */
         #header {
@@ -61,79 +38,43 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            flex-shrink: 0; /* Prevent header from shrinking */
+            flex-shrink: 0;
             gap: 10px;
+            z-index: 500; /* Above map */
+            position: relative; /* Needed for z-index */
         }
-
-        #location-info {
-            background-color: rgba(40, 40, 40, 0.7);
-            padding: 5px 10px;
-            border-radius: 5px;
-            text-align: center;
-            font-size: 12px;
-            flex-grow: 1; /* Allow info to take space */
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .status-pill {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 12px;
-            margin-left: 5px;
-            font-size: 11px;
-            font-weight: bold;
-        }
-
+        #location-info { background-color: rgba(40, 40, 40, 0.7); padding: 5px 10px; border-radius: 5px; text-align: center; font-size: 12px; flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .status-pill { display: inline-block; padding: 3px 8px; border-radius: 12px; margin-left: 5px; font-size: 11px; font-weight: bold; }
         .status-good { background-color: #34a853; color: white; }
         .status-bad { background-color: #ea4335; color: white; }
         .status-wait { background-color: #fbbc05; color: black; }
 
-        /* Map Container & Canvas */
-        #map-container, #chart-map-container {
-            position: relative;
+        /* --- Leaflet Map Container --- */
+        #map, #chart-map {
             flex-grow: 1; /* Take remaining vertical space */
-            background-color: #111;
-            overflow: hidden; /* Clip canvas content */
+            background-color: #222; /* Fallback bg */
+            width: 100%;
+            z-index: 1; /* Below UI elements */
+            cursor: grab; /* Default Leaflet cursor */
         }
+        #map:active, #chart-map:active { cursor: grabbing; }
 
-        #canvas, #chart-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            /* Width/height set by JS */
-            display: block; /* Prevent potential inline spacing issues */
-        }
+        /* Hide old canvas and location marker (now handled by Leaflet) */
+        #canvas, #chart-canvas, #current-location { display: none !important; }
 
-        /* Current Location Marker (Blue Dot) */
-        #current-location {
-            background-color: blue;
-            border: 1px solid white;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 5; /* Above canvas, below UI elements */
-            display: none; /* Initially hidden until location is known */
-        }
-
-         /* Selected Cone Indicator */
+         /* Selected Cone Indicator (Optional: marker styling might be better) */
         .selected-cone-indicator {
-            position: absolute; /* Position relative to map container */
-            top: 10px;
+            position: absolute;
+            top: 55px; /* Adjust position */
             left: 10px;
             padding: 5px 10px;
-            background-color: #FBBC05;
+            background-color: rgba(251, 188, 5, 0.8); /* Semi-transparent */
             color: black;
             border-radius: 15px;
             font-weight: bold;
             font-size: 12px;
-            display: none; /* Hidden by default */
-            z-index: 10;
+            display: none;
+            z-index: 600; /* Above map */
         }
 
         /* Controls Area */
@@ -142,182 +83,94 @@
             padding: 10px;
             display: flex;
             flex-direction: column;
-            gap: 8px; /* Space between control items */
-            flex-shrink: 0; /* Prevent controls from shrinking */
+            gap: 8px;
+            flex-shrink: 0;
+            z-index: 500; /* Above map */
+            position: relative; /* Needed for z-index */
         }
-
-        .control-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-        }
+        .control-row { display: flex; justify-content: space-between; gap: 10px; }
 
         /* Button Styles */
-        button {
-            padding: 10px;
-            border: none;
-            border-radius: 5px;
-            font-weight: bold;
-            font-size: 14px;
-            cursor: pointer;
-            text-align: center;
-            flex-grow: 1; /* Make buttons in a row share space */
-            flex-basis: 0; /* Allow shrinking/growing equally */
-            white-space: nowrap; /* Prevent text wrapping */
-            -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
-        }
-
+        button { padding: 10px; border: none; border-radius: 5px; font-weight: bold; font-size: 14px; cursor: pointer; text-align: center; flex-grow: 1; flex-basis: 0; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
         button.primary { background-color: #4285f4; color: white; }
-        button.active { background-color: #34a853; color: white; } /* Active selection state */
+        button.active { background-color: #34a853; color: white; }
         button.danger { background-color: #ea4335; color: white; }
         button.warning { background-color: #fbbc05; color: black; }
         button:disabled { background-color: #777; color: #ccc; cursor: not-allowed; }
 
         /* Slider Styles */
-        .slider-container {
-            display: flex;
-            flex-direction: column;
-            padding: 8px 10px;
-            background-color: rgba(40, 40, 40, 0.7);
-            border-radius: 5px;
-            gap: 5px;
-        }
-
-        .slider-label {
-            display: flex;
-            justify-content: space-between;
-            font-size: 12px;
-        }
-
-        input[type="range"] {
-            width: 100%;
-            cursor: pointer;
-        }
+        .slider-container { display: flex; flex-direction: column; padding: 8px 10px; background-color: rgba(40, 40, 40, 0.7); border-radius: 5px; gap: 5px; }
+        .slider-label { display: flex; justify-content: space-between; font-size: 12px; }
+        input[type="range"] { width: 100%; cursor: pointer; }
 
         /* Modal Styles */
-        #modal {
-            display: none; /* Hidden by default */
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            z-index: 100;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-        }
-
-        .modal-content {
-            background-color: #282828;
-            padding: 20px;
-            border-radius: 10px;
-            width: 100%;
-            max-width: 400px;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .modal-title {
-            font-size: 18px;
-            font-weight: bold;
-            text-align: center;
-        }
-
-        .modal-input {
-            width: 100%;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #444;
-            background-color: #333;
-            color: white;
-            font-size: 16px;
-        }
-
-        .modal-actions {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-        }
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.8); z-index: 1000; justify-content: center; align-items: center; padding: 20px; }
+        .modal-content { background-color: #282828; padding: 20px; border-radius: 10px; width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 15px; }
+        .modal-title { font-size: 18px; font-weight: bold; text-align: center; }
+        .modal-input { width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #444; background-color: #333; color: white; font-size: 16px; }
+        .modal-actions { display: flex; justify-content: space-between; gap: 10px; }
 
         /* Main Menu Styles */
-        #main-menu-screen {
-             justify-content: center;
-             align-items: center;
-        }
-        #main-menu {
-            display: flex;
-            flex-direction: column;
-            padding: 20px;
-            width: 100%;
-            max-width: 350px;
-            align-items: center;
-            gap: 20px;
-        }
+        #main-menu-screen { justify-content: center; align-items: center; }
+        #main-menu { display: flex; flex-direction: column; padding: 20px; width: 100%; max-width: 350px; align-items: center; gap: 20px; }
         .menu-title { font-size: 28px; margin-bottom: 20px; text-align: center; }
         .menu-button { width: 100%; padding: 15px; font-size: 18px; }
 
         /* Saved Charts Screen Styles */
-        #charts-container {
-            flex-grow: 1;
-            overflow-y: auto;
-            padding: 10px;
-        }
+        #charts-container { flex-grow: 1; overflow-y: auto; padding: 10px; }
         #no-charts-message { text-align: center; padding: 20px; color: #aaa; }
-        #charts-list {
-            list-style: none;
-            border: 1px solid #444;
-            border-radius: 5px;
-            overflow: hidden; /* Clip items to rounded border */
-        }
-        .chart-item {
-            padding: 12px 15px;
-            border-bottom: 1px solid #444;
-            cursor: pointer;
-            font-size: 14px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+        #charts-list { list-style: none; border: 1px solid #444; border-radius: 5px; overflow: hidden; }
+        .chart-item { padding: 12px 15px; border-bottom: 1px solid #444; cursor: pointer; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
         .chart-item:last-child { border-bottom: none; }
         .chart-item:hover { background-color: #333; }
         .chart-item-name { flex-grow: 1; margin-right: 10px; }
         .chart-item-details { font-size: 12px; color: #bbb; white-space: nowrap; }
-        .chart-item button {
-             flex-grow: 0; /* Don't grow delete button */
-             padding: 5px 8px;
-             font-size: 12px;
-             margin-left: 10px;
-        }
+        .chart-item button { flex-grow: 0; padding: 5px 8px; font-size: 12px; margin-left: 10px; }
 
         /* Chart View Screen Header */
-        #chart-name {
-            text-align: center;
-            font-size: 16px;
-            font-weight: bold;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-             flex-grow: 1; /* Take space */
-             margin: 0 10px; /* Add some margin */
-        }
+        #chart-name { text-align: center; font-size: 16px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-grow: 1; margin: 0 10px; }
 
         /* Back Button */
         .back-button {
             position: absolute;
-            top: 10px;
+            top: 8px; /* Align with header padding */
             left: 10px;
             padding: 8px 12px;
-            background-color: rgba(50, 50, 50, 0.6);
+            background-color: rgba(50, 50, 50, 0.8); /* More opaque */
             border: 1px solid #555;
             color: white;
             border-radius: 5px;
-            z-index: 20; /* Above map, below modal */
+            z-index: 600; /* Above map, below modal */
             font-size: 16px;
-            line-height: 1; /* Ensure consistent height */
+            line-height: 1;
+            cursor: pointer;
         }
+
+        /* --- Leaflet Marker Styling --- */
+        .cone-marker-icon {
+            font-size: 18px; /* Adjust emoji size */
+            text-align: center;
+            line-height: 1;
+            /* Add border/background for visibility if needed */
+            /* background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 50%; */
+            border: 1px solid transparent; /* Placeholder for selection */
+        }
+        .cone-marker-icon.selected {
+             /* Example selection style */
+             border: 2px solid lime;
+             border-radius: 50%;
+             background-color: rgba(0, 255, 0, 0.2);
+        }
+        .leaflet-marker-draggable {
+            cursor: grab;
+        }
+        .leaflet-marker-dragging {
+            cursor: grabbing;
+        }
+        /* Adjust Leaflet attribution position if shown */
+        .leaflet-control-attribution { font-size: 10px !important; background: rgba(255,255,255,0.7) !important; color: #333 !important; padding: 0 5px !important; }
+
     </style>
 </head>
 <body class="noselect">
@@ -335,7 +188,10 @@
     <!-- Mapping Screen -->
     <div id="mapping-screen" class="screen">
         <div id="app">
+            <!-- Back Button moved inside #app for z-index stacking -->
             <button id="back-to-main-button" class="back-button">←</button>
+            <!-- Optional Selected Cone Indicator -->
+            <div id="selected-cone-indicator" class="selected-cone-indicator">Pointer Cone Selected</div>
 
             <div id="header">
                 <div id="location-info">
@@ -345,11 +201,8 @@
                 <button id="save-button" class="primary" disabled>Save</button>
             </div>
 
-            <div id="map-container">
-                <canvas id="canvas"></canvas>
-                <div id="current-location"></div>
-                <div id="selected-cone-indicator" class="selected-cone-indicator">Pointer Cone Selected</div>
-            </div>
+            <!-- Leaflet Map Container -->
+            <div id="map"></div>
 
             <div id="controls">
                 <!-- GPS Accuracy Threshold Slider -->
@@ -373,25 +226,10 @@
                     <button id="btn-delete-last-cone" class="danger">Delete Last</button>
                 </div>
 
-                <!-- Zoom Controls -->
-                <div class="slider-container">
-                    <div class="slider-label">
-                        <span>Zoom Level:</span>
-                        <span id="zoom-value">1.0x</span>
-                    </div>
-                    <input type="range" id="zoom-slider" min="0.1" max="8" value="1" step="0.1">
-                </div>
+                <!-- REMOVED Zoom Controls -->
+                <!-- REMOVED World Rotation Controls -->
 
-                <!-- World Rotation Controls -->
-                <div class="slider-container">
-                    <div class="slider-label">
-                        <span>Rotate World:</span>
-                        <span id="rotation-value">0°</span>
-                    </div>
-                    <input type="range" id="world-rotation-slider" min="-180" max="180" value="0" step="1">
-                </div>
-
-                <!-- Pointer Cone Rotation Controls (conditionally displayed) -->
+                <!-- Pointer Cone Rotation Controls -->
                 <div id="pointer-rotation-container" class="slider-container" style="display:none;">
                     <div class="slider-label">
                         <span>Selected Pointer Rotation:</span>
@@ -413,10 +251,8 @@
             </div>
 
             <div id="charts-container">
-                <div id="no-charts-message">
-                    No saved charts yet. Create one or import a chart.
-                </div>
-                <ul id="charts-list"></ul> <!-- Items added dynamically -->
+                <div id="no-charts-message">No saved charts yet. Create one or import a chart.</div>
+                <ul id="charts-list"></ul>
             </div>
 
             <div id="controls">
@@ -435,31 +271,14 @@
 
             <div id="header">
                 <h2 id="chart-name">Chart View</h2>
-                 <button id="export-current-chart-button" class="warning">Export</button>
+                <button id="export-current-chart-button" class="warning">Export</button>
             </div>
 
-            <div id="chart-map-container">
-                <canvas id="chart-canvas"></canvas>
-            </div>
+            <!-- Leaflet Chart Map Container -->
+            <div id="chart-map"></div>
 
-            <div id="controls">
-                <!-- Zoom Controls for Chart View -->
-                <div class="slider-container">
-                    <div class="slider-label">
-                        <span>Zoom Level:</span>
-                        <span id="chart-zoom-value">1.0x</span>
-                    </div>
-                    <input type="range" id="chart-zoom-slider" min="0.1" max="8" value="1" step="0.1">
-                </div>
-
-                <!-- World Rotation Controls for Chart View -->
-                <div class="slider-container">
-                    <div class="slider-label">
-                        <span>Rotate World:</span>
-                        <span id="chart-rotation-value">0°</span>
-                    </div>
-                    <input type="range" id="chart-rotation-slider" min="-180" max="180" value="0" step="1">
-                </div>
+            <!-- REMOVED Chart Controls (Zoom/Rotate) -->
+            <div id="controls" style="display:none;"> <!-- Hide controls section for now -->
             </div>
         </div>
     </div>
@@ -482,23 +301,12 @@
     <script>
         // ==== Enums and Constants ====
         const ConeType = {
-            STARTING: 'starting', // First two cones placed
-            POINTER: 'pointer',   // Cone with direction
-            SINGLE: 'single'      // Standard cone marker
+            STARTING: 'starting',
+            POINTER: 'pointer',
+            SINGLE: 'single'
         };
-
-        const METERS_PER_LATITUDE = 111111; // Approximate meters per degree latitude
-        const START_CONE_RADIUS_PX = 8;     // Base radius in pixels at zoom 1
-        const POINTER_CONE_RADIUS_PX = 8;
-
-        // --- Triangle Constants ---
-        const POINTER_TRIANGLE_LENGTH_PX = 20; // How "long" the triangle is
-        const POINTER_TRIANGLE_BASE_HALF_WIDTH_PX = 6; // Half the width of the triangle's wide end
-        const POINTER_TRIANGLE_SIDE_OFFSET_Y_PX = 0; // How far DOWN (positive Y) to offset the triangle center line
-        // --- End Adjusted ---
-
-        const SELECTION_PADDING_PX = 3;
-        const SELECTION_LINE_WIDTH_PX = 2;
+        const INITIAL_MAP_ZOOM = 19; // Higher zoom for detail
+        const INITIAL_CHART_ZOOM = 18;
 
         // ==== App State ====
         const state = {
@@ -506,29 +314,19 @@
             selectedConeType: ConeType.POINTER,
             currentLocation: null, // { latitude, longitude, accuracy }
             cones: [],             // Array of Cone objects in the current mapping session
-            selectedConeIndex: null, // Index of the cone selected for rotation/moving
-            worldRotation: 0,      // Degrees, for mapping screen
-            zoomScale: 1.0,        // Multiplier for mapping screen
-            isDraggingMap: false,
-            isDraggingCone: false,
-            lastInteractionX: 0,
-            lastInteractionY: 0,
-            offsetX: 0,            // Map pan offset X (pixels)
-            offsetY: 0,            // Map pan offset Y (pixels)
-            gpsAccuracyThreshold: 10.0, // Meters
-            isGPSReady: false,     // Combined check of location available and accuracy good
-            savedCharts: [],       // Array of chart objects loaded from localStorage
-            currentViewingChart: null, // { name, coneData, createdAt, worldRotation? }
-            chartViewZoom: 1.0,
-            chartViewRotation: 0,
-            pointerConeRotation: 0, // Default/current rotation for NEW pointer cones
+            selectedConeIndex: null,
+            gpsAccuracyThreshold: 10.0,
+            isGPSReady: false,
+            savedCharts: [],
+            currentViewingChart: null,
+            pointerConeRotation: 0, // Default for NEW pointer cones
 
-            // --- State for Chart View Panning ---
-            chartViewOffsetX: 0,
-            chartViewOffsetY: 0,
-            isDraggingChartView: false,
-            lastChartViewInteractionX: 0,
-            lastChartViewInteractionY: 0,
+            // --- Leaflet Specific State ---
+            mapInstance: null,          // Holds the main Leaflet map object
+            chartMapInstance: null,     // Holds the chart view Leaflet map object
+            userLocationMarker: null,   // Leaflet marker for user's position
+            coneMarkersLayer: null,     // L.layerGroup for cones on main map
+            chartMarkersLayer: null,    // L.layerGroup for cones on chart map
         };
 
         // ==== DOM Elements ====
@@ -549,9 +347,7 @@
         const locationInfo = document.getElementById('location-info');
         const accuracyStatus = document.getElementById('accuracy-status');
         const saveButton = document.getElementById('save-button');
-        const mappingCanvas = document.getElementById('canvas');
-        const mappingCtx = mappingCanvas.getContext('2d');
-        const currentLocationMarker = document.getElementById('current-location');
+        const mapContainer = document.getElementById('map'); // Map div
         const selectedConeIndicator = document.getElementById('selected-cone-indicator');
         const accuracyThresholdSlider = document.getElementById('accuracy-threshold-slider');
         const accuracyThresholdValue = document.getElementById('accuracy-threshold-value');
@@ -559,10 +355,7 @@
         const btnSingleCone = document.getElementById('btn-single-cone');
         const btnTagCone = document.getElementById('btn-tag-cone');
         const btnDeleteLastCone = document.getElementById('btn-delete-last-cone');
-        const zoomSlider = document.getElementById('zoom-slider');
-        const zoomValue = document.getElementById('zoom-value');
-        const worldRotationSlider = document.getElementById('world-rotation-slider');
-        const rotationValue = document.getElementById('rotation-value');
+        // REMOVED: zoomSlider, zoomValue, worldRotationSlider, rotationValue
         const pointerRotationContainer = document.getElementById('pointer-rotation-container');
         const pointerRotationSlider = document.getElementById('pointer-rotation-slider');
         const pointerRotationValue = document.getElementById('pointer-rotation-value');
@@ -576,14 +369,10 @@
         const deleteAllChartsButton = document.getElementById('delete-all-charts-button');
 
         // Chart View Screen Elements
-        const chartViewCanvas = document.getElementById('chart-canvas');
-        const chartViewCtx = chartViewCanvas.getContext('2d');
+        const chartMapContainer = document.getElementById('chart-map'); // Chart map div
         const chartName = document.getElementById('chart-name');
         const exportCurrentChartButton = document.getElementById('export-current-chart-button');
-        const chartZoomSlider = document.getElementById('chart-zoom-slider');
-        const chartZoomValue = document.getElementById('chart-zoom-value');
-        const chartRotationSlider = document.getElementById('chart-rotation-slider');
-        const chartRotationValue = document.getElementById('chart-rotation-value');
+        // REMOVED: chartZoomSlider, chartZoomValue, chartRotationSlider, chartRotationValue
 
         // Modal Elements
         const modal = document.getElementById('modal');
@@ -596,344 +385,236 @@
 
         // ==== Core Classes ====
         class Cone {
-            // Store location in degrees lat/lon
             constructor(latitude, longitude, type = ConeType.SINGLE, rotation = 0) {
                 this.latitude = latitude;
                 this.longitude = longitude;
                 this.type = type;
-                this.rotation = rotation; // In degrees
+                this.rotation = rotation;
                 this.id = 'cone_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                // Screen coordinates updated during drawing calculations
-                this.screenX = 0;
-                this.screenY = 0;
+                this.leafletMarker = null; // To store the associated Leaflet marker object
             }
         }
 
-        // ==== Utility Functions ====
+        // ==== Leaflet Icons ====
+        // Use DivIcon with emoji or SVG for customization. Add 'cone-marker-icon' class.
+        const singleConeIcon = L.divIcon({
+            html: '🟠',
+            className: 'cone-marker-icon',
+            iconSize: [20, 20], iconAnchor: [10, 10] // Center anchor
+        });
+        const pointerConeIcon = L.divIcon({
+            html: '🚩', // This emoji points right by default, rotation adjusts
+            className: 'cone-marker-icon pointer-cone-icon',
+            iconSize: [20, 20], iconAnchor: [10, 20] // Anchor at base/center
+        });
+        const startConeIcon = L.divIcon({
+            html: '🟢',
+            className: 'cone-marker-icon',
+            iconSize: [20, 20], iconAnchor: [10, 10]
+        });
 
-        // Calculate meters per degree of longitude at a given latitude
-        function metersPerDegreeLongitude(latitude) {
-            return METERS_PER_LATITUDE * Math.cos(latitude * Math.PI / 180);
-        }
+        // ==== Utility Functions (Leaflet replaces most) ====
+        // REMOVED: metersPerDegreeLongitude, screenToGeo, geoToScreen, calculateMetersPerPixel
+        // REMOVED: updateConeScreenPositions, findConeAt
 
-        // Convert screen pixel coordinates (relative to canvas top-left) to geographic location
-        // Accounts for current GPS center, pan offset, zoom, and world rotation
-        function screenToGeo(screenX, screenY) {
-            if (!state.currentLocation) return null;
+        // ==== Drawing Functions (Replaced by Leaflet Markers) ====
+        // REMOVED: drawCones, drawMap, drawChartView, resizeCanvas (Leaflet handles resize)
 
-            const canvasWidth = mappingCanvas.width;
-            const canvasHeight = mappingCanvas.height;
-            const centerX = canvasWidth / 2;
-            const centerY = canvasHeight / 2;
-
-            // 1. Reverse World Rotation
-            const angleRad = -state.worldRotation * Math.PI / 180;
-            const cosA = Math.cos(angleRad);
-            const sinA = Math.sin(angleRad);
-            const rotatedX = (screenX - centerX) * cosA - (screenY - centerY) * sinA + centerX;
-            const rotatedY = (screenX - centerX) * sinA + (screenY - centerY) * cosA + centerY;
-
-            // 2. Reverse Pan Offset
-            const xFromCenter = rotatedX - centerX - state.offsetX;
-            const yFromCenter = rotatedY - centerY - state.offsetY;
-
-            // 3. Reverse Zoom
-            const metersPerPixel = calculateMetersPerPixel();
-            const metersX = xFromCenter * metersPerPixel;
-            const metersY = yFromCenter * metersPerPixel;
-
-            // 4. Convert Meters to Lat/Lon Deltas
-            const metersPerLon = metersPerDegreeLongitude(state.currentLocation.latitude);
-            const deltaLon = metersX / metersPerLon;
-            const deltaLat = -metersY / METERS_PER_LATITUDE;
-
-            return {
-                latitude: state.currentLocation.latitude + deltaLat,
-                longitude: state.currentLocation.longitude + deltaLon
-            };
-        }
-
-        // Convert geographic location to screen coordinates (relative to canvas top-left)
-        // Needs ref location, pan offset, zoom, world rotation
-        function geoToScreen(coneLat, coneLon, refLat, refLon, currentOffsetX, currentOffsetY, currentZoom, currentRotation) {
-            // Use mappingCanvas size as reference, assuming chartCanvas is similar layout
-            const canvasWidth = mappingCanvas.width;
-            const canvasHeight = mappingCanvas.height;
-            const centerX = canvasWidth / 2;
-            const centerY = canvasHeight / 2;
-
-            // 1. Calculate Meter Offsets
-            const metersPerLon = metersPerDegreeLongitude(refLat);
-            const metersX = (coneLon - refLon) * metersPerLon;
-            const metersY = -(coneLat - refLat) * METERS_PER_LATITUDE;
-
-            // 2. Apply Zoom
-            const metersPerPixel = calculateMetersPerPixel(currentZoom);
-            const pixelsX = metersX / metersPerPixel;
-            const pixelsY = metersY / metersPerPixel;
-
-            // 3. Apply Pan Offset
-            const initialX = centerX + currentOffsetX + pixelsX;
-            const initialY = centerY + currentOffsetY + pixelsY;
-
-            // 4. Apply World Rotation
-            const angleRad = currentRotation * Math.PI / 180;
-            const cosA = Math.cos(angleRad);
-            const sinA = Math.sin(angleRad);
-
-            const finalX = (initialX - centerX) * cosA - (initialY - centerY) * sinA + centerX;
-            const finalY = (initialX - centerX) * sinA + (initialY - centerY) * cosA + centerY;
-
-            return { x: finalX, y: finalY };
-        }
-
-        // Calculate map scale based on zoom
-        function calculateMetersPerPixel(zoom = state.zoomScale) {
-            const basePixelsPerMeter = 10; // 1 meter = 10 pixels at zoom 1.0
-            return 1 / (basePixelsPerMeter * zoom);
-        }
-
-
-        // Update screenX/screenY for all cones based on current mapping state
-        function updateConeScreenPositions() {
-            if (!state.currentLocation) return;
-
-            state.cones.forEach(cone => {
-                const screenPos = geoToScreen(
-                    cone.latitude, cone.longitude,
-                    state.currentLocation.latitude, state.currentLocation.longitude,
-                    state.offsetX, state.offsetY, state.zoomScale, state.worldRotation
-                );
-                cone.screenX = screenPos.x;
-                cone.screenY = screenPos.y;
-            });
-        }
-
-        // Find cone index at screen coordinates on mapping canvas
-        function findConeAt(screenX, screenY) {
-             if (!state.currentLocation) return null;
-             const hitRadius = Math.max(START_CONE_RADIUS_PX, POINTER_CONE_RADIUS_PX) * state.zoomScale + 5;
-
-            for (let i = state.cones.length - 1; i >= 0; i--) {
-                const cone = state.cones[i];
-                 const coneScreenPos = geoToScreen(
-                    cone.latitude, cone.longitude,
-                    state.currentLocation.latitude, state.currentLocation.longitude,
-                    state.offsetX, state.offsetY, state.zoomScale, state.worldRotation
-                 );
-
-                const dx = screenX - coneScreenPos.x;
-                const dy = screenY - coneScreenPos.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-
-                if (dist <= hitRadius) {
-                    return i;
-                }
+        // ==== Leaflet Map Initialization ====
+        function initializeMapView(centerCoords = [0, 0], zoom = INITIAL_MAP_ZOOM) {
+            // Clean up existing map if necessary (e.g., switching from chart view)
+            if (state.mapInstance) {
+                 console.log("Removing existing map instance.");
+                 state.mapInstance.remove();
+                 state.mapInstance = null;
+                 if (state.coneMarkersLayer) state.coneMarkersLayer.clearLayers(); // Clear layers too
+                 if (state.userLocationMarker) state.userLocationMarker = null;
             }
-            return null;
-        }
-
-        // ==== Drawing Functions ====
-
-        // Updated drawCones function with final pointer style
-        function drawCones(context, conesToDraw, refLocation, offsetX, offsetY, zoom, rotation) {
-            if (!refLocation) return;
-
-            const canvasWidth = context.canvas.width;
-            const canvasHeight = context.canvas.height;
-
-            conesToDraw.forEach((cone, index) => {
-                 // Calculate screen position for drawing THIS cone based on view parameters
-                 const screenPos = geoToScreen(
-                    cone.latitude, cone.longitude,
-                    refLocation.latitude, refLocation.longitude,
-                    offsetX, offsetY, zoom, rotation // Pass world rotation here
-                );
-
-                const isSelected = (context === mappingCtx && index === state.selectedConeIndex); // Selection only on mapping screen
-
-                context.save(); // Save context state before drawing each cone
-
-                // --- Apply individual cone rotation ONLY for pointer cones ---
-                let coneRotationRad = 0;
-                if (cone.type === ConeType.POINTER) {
-                    coneRotationRad = cone.rotation * Math.PI / 180;
-                }
-
-                // Translate to the calculated screen position first
-                context.translate(screenPos.x, screenPos.y);
-                // Then rotate the context for this specific cone (if it's a pointer)
-                context.rotate(coneRotationRad); // <<< THIS ROTATION APPLIES TO EVERYTHING BELOW
-
-                // --- Draw the cone shape relative to the new (0,0) origin, now rotated ---
-
-                if (cone.type === ConeType.STARTING) {
-                    const radius = START_CONE_RADIUS_PX * zoom;
-                    context.beginPath();
-                    context.fillStyle = 'green';
-                    context.arc(0, 0, radius, 0, Math.PI * 2);
-                    context.fill();
-                    if (isSelected) {
-                        context.strokeStyle = 'lime';
-                        context.lineWidth = SELECTION_LINE_WIDTH_PX * zoom;
-                        context.beginPath();
-                        context.arc(0, 0, radius + SELECTION_PADDING_PX * zoom, 0, Math.PI * 2);
-                        context.stroke();
-                    }
-                } else if (cone.type === ConeType.POINTER) {
-                    const baseRadius = POINTER_CONE_RADIUS_PX * zoom;
-                    // --- Triangle Calculations ---
-                    const triLength = POINTER_TRIANGLE_LENGTH_PX * zoom;
-                    const triBaseHalfWidth = POINTER_TRIANGLE_BASE_HALF_WIDTH_PX * zoom;
-                    const triangleOffsetY = POINTER_TRIANGLE_SIDE_OFFSET_Y_PX * zoom;
-
-                    // Define triangle points relative to (0, triangleOffsetY)
-                    // *** REVERSED ORIENTATION ***
-                    const triTipX = 0;          // Tip is now at X=0 (pointing towards center)
-                    const triBaseX = triLength; // Base is further out along positive X
-
-                    // 1. Draw the base circle (at 0,0) - will be rotated by coneRotationRad
-                    context.beginPath();
-                    context.fillStyle = 'orange';
-                    context.arc(0, 0, baseRadius, 0, Math.PI * 2);
-                    context.fill();
-
-                    // 2. Draw the direction indicator TRIANGLE - will ALSO be rotated by coneRotationRad
-                    context.fillStyle = 'red';
-                    context.beginPath();
-                    context.moveTo(triTipX, triangleOffsetY);
-                    context.lineTo(triBaseX, triangleOffsetY - triBaseHalfWidth);
-                    context.lineTo(triBaseX, triangleOffsetY + triBaseHalfWidth);
-                    context.closePath();
-                    context.fill();
-
-                    // 3. Draw selection indicator if selected
-                    if (isSelected) {
-                        context.beginPath();
-                        context.strokeStyle = 'lime';
-                        context.lineWidth = SELECTION_LINE_WIDTH_PX * zoom;
-                        const max_x = Math.max(baseRadius, triBaseX);
-                        const max_y = Math.max(baseRadius, Math.abs(triangleOffsetY) + triBaseHalfWidth);
-                        const selectionRadius = Math.sqrt(max_x * max_x + max_y * max_y) + SELECTION_PADDING_PX * zoom;
-                        context.arc(0, 0, selectionRadius, 0, Math.PI * 2);
-                        context.stroke();
-                    }
-                } else { // ConeType.SINGLE
-                    const radius = POINTER_CONE_RADIUS_PX * zoom;
-                    context.beginPath();
-                    context.fillStyle = 'orange';
-                    context.arc(0, 0, radius, 0, Math.PI * 2);
-                    context.fill();
-                    if (isSelected) {
-                        context.strokeStyle = 'lime';
-                        context.lineWidth = SELECTION_LINE_WIDTH_PX * zoom;
-                        context.beginPath();
-                        context.arc(0, 0, radius + SELECTION_PADDING_PX * zoom, 0, Math.PI * 2);
-                        context.stroke();
-                    }
-                }
-
-                context.restore(); // Restore context state (removes translate and the single outer rotate)
-            });
-        }
-
-
-        function drawMap() {
-            const canvasWidth = mappingCanvas.width;
-            const canvasHeight = mappingCanvas.height;
-            mappingCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-
-            if (state.currentLocation) {
-                drawCones(
-                    mappingCtx,
-                    state.cones,
-                    state.currentLocation,
-                    state.offsetX,
-                    state.offsetY,
-                    state.zoomScale,
-                    state.worldRotation
-                );
+            if (state.chartMapInstance) { // Also cleanup chart map if active
+                 console.log("Removing existing chart map instance.");
+                 state.chartMapInstance.remove();
+                 state.chartMapInstance = null;
+                 if(state.chartMarkersLayer) state.chartMarkersLayer.clearLayers();
             }
-            currentLocationMarker.style.display = state.currentLocation ? 'block' : 'none';
-        }
 
-        // Updated drawChartView to use chart offset state
-        function drawChartView() {
-            if (!state.currentViewingChart || state.currentViewingChart.coneData.length === 0) {
-                chartViewCtx.clearRect(0, 0, chartViewCanvas.width, chartViewCanvas.height);
+
+            if (!mapContainer) {
+                console.error("Map container div not found!");
                 return;
             }
+            console.log("Initializing main map view at", centerCoords, "zoom", zoom);
 
-            const chart = state.currentViewingChart;
-            const canvasWidth = chartViewCanvas.width;
-            const canvasHeight = chartViewCanvas.height;
-            chartViewCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+            state.mapInstance = L.map(mapContainer, { // Use the div's ID
+                center: centerCoords,
+                zoom: zoom,
+                zoomControl: true, // Show Leaflet's zoom control
+                attributionControl: true // Show basic attribution
+            });
 
-            const referenceLocation = {
-                latitude: chart.coneData[0].latitude,
-                longitude: chart.coneData[0].longitude
+            // Add Tile Layer
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 21, // Allow deep zoom
+                maxNativeZoom: 19,
+                attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
+            }).addTo(state.mapInstance);
+
+            // Initialize Layer Group for cone markers
+            state.coneMarkersLayer = L.layerGroup().addTo(state.mapInstance);
+
+            // Add map click listener to deselect cones
+            state.mapInstance.on('click', deselectCone);
+
+             // Add scale control
+             L.control.scale({ imperial: false }).addTo(state.mapInstance);
+
+            // Redraw existing cones if any (e.g., after screen switch back)
+             if (state.cones.length > 0) {
+                 console.log("Redrawing existing cones on map init");
+                 state.cones.forEach((cone, index) => createOrUpdateConeMarker(cone, index)); // Recreate markers
+             }
+        }
+
+        function initializeChartView(centerCoords, zoom = INITIAL_CHART_ZOOM, cones = []) {
+             // Clean up existing map if necessary
+            if (state.chartMapInstance) {
+                 console.log("Removing existing chart map instance.");
+                 state.chartMapInstance.remove();
+                 state.chartMapInstance = null;
+                 if(state.chartMarkersLayer) state.chartMarkersLayer.clearLayers();
+            }
+             if (state.mapInstance) { // Also cleanup main map if active
+                 console.log("Removing existing main map instance.");
+                 state.mapInstance.remove();
+                 state.mapInstance = null;
+                 if (state.coneMarkersLayer) state.coneMarkersLayer.clearLayers();
+                 if (state.userLocationMarker) state.userLocationMarker = null;
+            }
+
+            if (!chartMapContainer) {
+                console.error("Chart map container div not found!");
+                return;
+            }
+             console.log("Initializing chart map view.");
+
+            state.chartMapInstance = L.map(chartMapContainer).setView(centerCoords, zoom);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 21, maxNativeZoom: 19,
+                attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
+            }).addTo(state.chartMapInstance);
+
+            state.chartMarkersLayer = L.layerGroup().addTo(state.chartMapInstance);
+
+             // Add scale control
+             L.control.scale({ imperial: false }).addTo(state.chartMapInstance);
+
+            // Add markers for the loaded chart
+            cones.forEach(coneData => {
+                const cone = new Cone(coneData.latitude, coneData.longitude, coneData.type, coneData.rotation);
+                // Use non-draggable markers for chart view
+                createOrUpdateConeMarker(cone, -1, false, state.chartMarkersLayer);
+            });
+
+            // Fit map bounds to markers if there are any
+            if (cones && cones.length > 0 && state.chartMapInstance) {
+                try {
+                    const bounds = L.latLngBounds(cones.map(c => [c.latitude, c.longitude]));
+                     if (bounds.isValid()) {
+                        state.chartMapInstance.fitBounds(bounds.pad(0.1)); // Add padding
+                     } else {
+                         console.warn("Could not create valid bounds for chart view.");
+                         state.chartMapInstance.setView(centerCoords, zoom); // Fallback
+                     }
+                } catch(e) {
+                     console.error("Error fitting bounds:", e);
+                     state.chartMapInstance.setView(centerCoords, zoom); // Fallback
+                 }
+            } else if (state.chartMapInstance) {
+                 state.chartMapInstance.setView(centerCoords, zoom); // Fallback if no cones
+             }
+        }
+
+
+        // ==== Cone Management Functions (Leaflet Version) ====
+
+        // Creates or updates a Leaflet marker for a cone
+        function createOrUpdateConeMarker(cone, index, draggable = true, layerGroup = state.coneMarkersLayer) {
+            if (!layerGroup) {
+                 console.error("Target layer group is not available for cone marker.");
+                 return;
+             }
+
+             // Remove existing marker if updating
+             if (cone.leafletMarker) {
+                 layerGroup.removeLayer(cone.leafletMarker);
+                 cone.leafletMarker = null;
+             }
+
+            let icon;
+            let markerOptions = {
+                icon: singleConeIcon, // Default
+                rotationOrigin: 'center center', // Adjust as needed for pointer cones
+                rotationAngle: cone.rotation || 0,
+                draggable: draggable // Make draggable for mapping screen
             };
 
-             drawCones(
-                chartViewCtx,
-                chart.coneData,
-                referenceLocation,
-                state.chartViewOffsetX, // Use chart view offset
-                state.chartViewOffsetY, // Use chart view offset
-                state.chartViewZoom,
-                state.chartViewRotation
-            );
+            if (cone.type === ConeType.STARTING) icon = startConeIcon;
+            else if (cone.type === ConeType.POINTER) icon = pointerConeIcon;
+            else icon = singleConeIcon;
+
+            markerOptions.icon = icon;
+
+            // Use L.marker (or L.rotatedMarker for better rotation handling if needed)
+            const marker = L.marker([cone.latitude, cone.longitude], markerOptions);
+
+            // Store reference
+            cone.leafletMarker = marker;
+
+            // Add click listener ONLY if it's on the main mapping screen (index >= 0)
+            if (index >= 0) {
+                 marker.on('click', (e) => {
+                    L.DomEvent.stopPropagation(e); // Prevent map click from firing deselect
+                    selectCone(index);
+                });
+
+                // Add drag listener ONLY if draggable
+                if (draggable) {
+                     marker.on('dragend', (e) => {
+                        const draggedMarker = e.target;
+                        const latLng = draggedMarker.getLatLng();
+                        // Find the cone again by marker reference (index might change if cones deleted)
+                        const coneIndex = state.cones.findIndex(c => c.leafletMarker === draggedMarker);
+                        if (coneIndex !== -1) {
+                            console.log(`Dragged cone ${coneIndex} to ${latLng.lat}, ${latLng.lng}`);
+                            state.cones[coneIndex].latitude = latLng.lat;
+                            state.cones[coneIndex].longitude = latLng.lng;
+                            // Data updated, map already reflects visual change
+                            updateSaveButtonState(); // Indicate change potentially
+                        } else {
+                            console.warn("Could not find cone associated with dragged marker");
+                        }
+                    });
+                }
+            }
+
+            marker.addTo(layerGroup);
+
+            // Apply selection style if this cone is currently selected
+            if (index === state.selectedConeIndex && marker._icon) {
+                 L.DomUtil.addClass(marker._icon, 'selected');
+             }
         }
 
-        // Resize canvas elements to fill their containers
-        function resizeCanvas() {
-            const mapContainer = mappingCanvas.parentElement;
-            if (mapContainer) {
-                mappingCanvas.width = mapContainer.clientWidth;
-                mappingCanvas.height = mapContainer.clientHeight;
-            }
-
-            const chartContainer = chartViewCanvas.parentElement;
-            if (chartContainer) {
-                chartViewCanvas.width = chartContainer.clientWidth;
-                chartViewCanvas.height = chartContainer.clientHeight;
-            }
-
-             // Redraw relevant canvases after resize
-            if (state.currentScreen === 'mapping') {
-                 updateConeScreenPositions();
-                 drawMap();
-            } else if (state.currentScreen === 'chartView') {
-                 drawChartView();
-            }
-        }
-
-        // ==== Cone Management Functions ====
-
-        // Updated tagCone to make first two cones starting type
         function tagCone() {
-            // 1. Check GPS status
-            if (!state.currentLocation || !state.isGPSReady) {
-                 alert("GPS location not available or accuracy too low.");
+            if (!state.currentLocation || !state.isGPSReady || !state.mapInstance) {
+                 alert("GPS location not available, accuracy too low, or map not initialized.");
                  return;
             }
 
-            // 2. Determine the type and rotation for the new cone
-            let coneType;
-            let coneRotation = 0;
+            let coneType = (state.cones.length < 2) ? ConeType.STARTING : state.selectedConeType;
+            let coneRotation = (coneType === ConeType.POINTER) ? state.pointerConeRotation : 0;
 
-            // Check if this is the first or second cone being placed
-            if (state.cones.length < 2) {
-                coneType = ConeType.STARTING;
-            } else {
-                // For the 3rd cone onwards, use the user's selected type
-                coneType = state.selectedConeType;
-                if (coneType === ConeType.POINTER) {
-                    coneRotation = state.pointerConeRotation;
-                }
-            }
-
-            // 3. Create the new Cone object
+            // Use the current GPS location
             const newCone = new Cone(
                 state.currentLocation.latitude,
                 state.currentLocation.longitude,
@@ -941,35 +622,40 @@
                 coneRotation
             );
 
-            // 4. Add the new cone to the state array
+            // Add to state array FIRST to get the correct index
             state.cones.push(newCone);
+            const newIndex = state.cones.length - 1;
 
-            // 5. Handle selection state
-            if (newCone.type === ConeType.POINTER) {
-                selectCone(state.cones.length - 1);
-            } else {
-                 deselectCone();
-             }
+            // Create the Leaflet marker for it
+            createOrUpdateConeMarker(newCone, newIndex, true, state.coneMarkersLayer);
 
-            // 6. Update visuals and UI state
-            updateConeScreenPositions();
-            drawMap();
+            console.log(`Tagged ${coneType} cone #${newIndex} at ${newCone.latitude}, ${newCone.longitude}`);
+
             updateSaveButtonState();
-        }
 
+            if (newCone.type === ConeType.POINTER) {
+                selectCone(newIndex); // Select the newly added pointer cone
+            } else {
+                 deselectCone(); // Deselect if it wasn't a pointer
+             }
+        }
 
         function deleteLastCone() {
             if (state.cones.length > 0) {
                 const deletedConeIndex = state.cones.length - 1;
-                state.cones.pop();
+                const deletedCone = state.cones.pop();
 
+                if (deletedCone.leafletMarker && state.coneMarkersLayer) {
+                    state.coneMarkersLayer.removeLayer(deletedCone.leafletMarker);
+                    console.log(`Removed marker for cone ${deletedConeIndex}`);
+                }
+
+                // If the deleted cone was selected, deselect
                 if (state.selectedConeIndex === deletedConeIndex) {
                     deselectCone();
-                } else if (state.selectedConeIndex > deletedConeIndex) {
-                     state.selectedConeIndex--;
-                 }
+                }
+                // No need to adjust selectedConeIndex otherwise, as it refers to the static array index
 
-                drawMap();
                 updateSaveButtonState();
             }
         }
@@ -980,93 +666,112 @@
                  return;
              }
 
-            state.selectedConeIndex = index;
-            const cone = state.cones[index];
+             const coneToSelect = state.cones[index];
+             if (!coneToSelect) return; // Safety check
 
-            if (cone.type === ConeType.POINTER) {
-                state.pointerConeRotation = cone.rotation;
-                pointerRotationSlider.value = cone.rotation;
-                pointerRotationValue.textContent = `${Math.round(cone.rotation)}°`;
-                pointerRotationContainer.style.display = 'flex';
-                selectedConeIndicator.style.display = 'block';
-            } else {
-                pointerRotationContainer.style.display = 'none';
-                selectedConeIndicator.style.display = 'none';
+            console.log("Selecting cone", index);
+
+             // Deselect previous marker visually
+             if (state.selectedConeIndex !== null && state.selectedConeIndex < state.cones.length) {
+                 const prevCone = state.cones[state.selectedConeIndex];
+                 if (prevCone && prevCone.leafletMarker && prevCone.leafletMarker._icon) {
+                    L.DomUtil.removeClass(prevCone.leafletMarker._icon, 'selected');
+                 }
+             }
+
+            state.selectedConeIndex = index;
+
+            // Select new marker visually
+            if (coneToSelect.leafletMarker && coneToSelect.leafletMarker._icon) {
+                 L.DomUtil.addClass(coneToSelect.leafletMarker._icon, 'selected');
             }
 
-            drawMap();
+            // Update UI for pointer cone rotation if applicable
+            if (coneToSelect.type === ConeType.POINTER) {
+                state.pointerConeRotation = coneToSelect.rotation; // Sync slider state
+                pointerRotationSlider.value = coneToSelect.rotation;
+                pointerRotationValue.textContent = `${Math.round(coneToSelect.rotation)}°`;
+                pointerRotationContainer.style.display = 'flex';
+                // selectedConeIndicator.style.display = 'block'; // Optional UI indicator
+            } else {
+                pointerRotationContainer.style.display = 'none';
+                // selectedConeIndicator.style.display = 'none';
+            }
         }
 
         function deselectCone() {
+             console.log("Deselecting cone");
+            // Deselect previous marker visually
+             if (state.selectedConeIndex !== null && state.selectedConeIndex < state.cones.length) {
+                 const prevCone = state.cones[state.selectedConeIndex];
+                 if (prevCone && prevCone.leafletMarker && prevCone.leafletMarker._icon) {
+                    L.DomUtil.removeClass(prevCone.leafletMarker._icon, 'selected');
+                 }
+             }
+
             state.selectedConeIndex = null;
             pointerRotationContainer.style.display = 'none';
-            selectedConeIndicator.style.display = 'none';
-            drawMap();
+            // selectedConeIndicator.style.display = 'none';
         }
 
          function updateSelectedConeRotation(rotation) {
-             if (state.selectedConeIndex !== null && state.cones[state.selectedConeIndex].type === ConeType.POINTER) {
-                 state.cones[state.selectedConeIndex].rotation = rotation;
-                 drawMap();
+             if (state.selectedConeIndex !== null && state.cones[state.selectedConeIndex]) {
+                 const cone = state.cones[state.selectedConeIndex];
+                 if (cone.type === ConeType.POINTER) {
+                    cone.rotation = rotation;
+                    // Update the marker's rotation if it exists and has the method
+                    if (cone.leafletMarker && typeof cone.leafletMarker.setRotationAngle === 'function') {
+                        cone.leafletMarker.setRotationAngle(rotation);
+                    } else if (cone.leafletMarker) {
+                         // Basic marker rotation might require recreating icon or CSS workaround
+                         console.warn("Marker doesn't support setRotationAngle. Using RotatedMarker plugin?");
+                     }
+                    updateSaveButtonState(); // Rotation is a change worth saving
+                 }
             }
          }
 
-         function moveSelectedCone(deltaX, deltaY) {
-            if (state.selectedConeIndex === null) return;
+         // REMOVED: moveSelectedCone (handled by Leaflet draggable marker + 'dragend' event)
 
-            const cone = state.cones[state.selectedConeIndex];
-            const currentScreenPos = geoToScreen(
-                cone.latitude, cone.longitude,
-                state.currentLocation.latitude, state.currentLocation.longitude,
-                state.offsetX, state.offsetY, state.zoomScale, state.worldRotation
-            );
-
-            const newScreenX = currentScreenPos.x + deltaX;
-            const newScreenY = currentScreenPos.y + deltaY;
-
-            const newGeo = screenToGeo(newScreenX, newScreenY);
-
-            if (newGeo) {
-                cone.latitude = newGeo.latitude;
-                cone.longitude = newGeo.longitude;
-                cone.screenX = newScreenX;
-                cone.screenY = newScreenY;
-                 drawMap();
-            }
-        }
-
-        function updateSaveButtonState() {
+         function updateSaveButtonState() {
              saveButton.disabled = state.cones.length === 0;
          }
 
 
-        // ==== Geolocation Functions ====
+        // ==== Geolocation Functions (Leaflet Integration) ====
         let watchId = null;
+        let isFirstLocationUpdate = true; // Flag to force map centering on first fix
 
         function initGeolocation() {
             if ('geolocation' in navigator) {
                 if (watchId !== null) {
                     navigator.geolocation.clearWatch(watchId);
                 }
-                 updateLocationStatus("WAIT", "Requesting GPS...");
-                 currentLocationMarker.style.display = 'none';
-                 state.currentLocation = null;
-                 state.isGPSReady = false;
-                 btnTagCone.disabled = true;
+                updateLocationStatus("WAIT", "Requesting GPS...");
+                if (state.userLocationMarker && state.mapInstance) { // Remove old marker if restarting
+                    state.mapInstance.removeLayer(state.userLocationMarker);
+                    state.userLocationMarker = null;
+                }
+                state.currentLocation = null;
+                state.isGPSReady = false;
+                btnTagCone.disabled = true;
+                isFirstLocationUpdate = true; // Reset flag
 
+                // Try to get a quick initial position
                 navigator.geolocation.getCurrentPosition(
                     handleLocationUpdate,
                     handleLocationError,
-                    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+                    { enableHighAccuracy: true, maximumAge: 60000, timeout: 10000 } // Allow cached pos initially
                 );
 
+                // Start watching for continuous updates
                 watchId = navigator.geolocation.watchPosition(
                     handleLocationUpdate,
                     handleLocationError,
-                    { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 }
+                    { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 } // High accuracy, recent data
                 );
             } else {
-                updateLocationStatus("BAD", "Geolocation not supported");
+                updateLocationStatus("BAD", "NO GPS", "Geolocation not supported");
                 btnTagCone.disabled = true;
             }
         }
@@ -1075,29 +780,28 @@
             if (watchId !== null && navigator.geolocation) {
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
-                 updateLocationStatus("BAD", "GPS Disabled");
-                 currentLocationMarker.style.display = 'none';
-                 state.isGPSReady = false;
-                 btnTagCone.disabled = true;
+                updateLocationStatus("BAD", "OFF", "GPS Disabled");
+                if (state.userLocationMarker && state.mapInstance) {
+                    state.mapInstance.removeLayer(state.userLocationMarker);
+                    state.userLocationMarker = null;
+                }
+                state.isGPSReady = false;
+                btnTagCone.disabled = true;
             }
         }
 
-
         function handleLocationUpdate(position) {
-            state.currentLocation = {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy
-            };
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            const accuracy = position.coords.accuracy;
 
-             const accuracyMeters = position.coords.accuracy;
-             state.isGPSReady = accuracyMeters <= state.gpsAccuracyThreshold;
+            state.currentLocation = { latitude: lat, longitude: lon, accuracy: accuracy };
+            state.isGPSReady = accuracy <= state.gpsAccuracyThreshold;
 
-             const latStr = position.coords.latitude.toFixed(6);
-             const lonStr = position.coords.longitude.toFixed(6);
-             const accStr = accuracyMeters.toFixed(1);
-
-             let statusText = `Lat:${latStr}, Lon:${lonStr} | Acc:${accStr}m`;
+            const latStr = lat.toFixed(6);
+            const lonStr = lon.toFixed(6);
+            const accStr = accuracy.toFixed(1);
+            let statusText = `Lat:${latStr}, Lon:${lonStr} | Acc:${accStr}m`;
 
             if (state.isGPSReady) {
                  updateLocationStatus("GOOD", "OK", statusText);
@@ -1106,25 +810,61 @@
                 updateLocationStatus("BAD", "ACC POOR", statusText);
                  btnTagCone.disabled = true;
             }
-            updateConeScreenPositions();
-            drawMap();
-        }
 
+            // --- Update Leaflet Map ---
+            if (state.mapInstance && state.currentScreen === 'mapping') {
+                 const currentLatLng = L.latLng(lat, lon);
+
+                 // Center map on first good fix or if accuracy is good
+                 if (isFirstLocationUpdate && state.isGPSReady) {
+                     console.log("First GPS fix, centering map.");
+                     state.mapInstance.setView(currentLatLng, state.mapInstance.getZoom() || INITIAL_MAP_ZOOM);
+                     isFirstLocationUpdate = false;
+                 } else if (!isFirstLocationUpdate && state.isGPSReady) {
+                    // Optionally keep centering or just pan
+                    // state.mapInstance.panTo(currentLatLng);
+                 }
+
+                 // Update or create user location marker (Accuracy Circle)
+                 if (!state.userLocationMarker) {
+                     console.log("Creating user location marker.");
+                     state.userLocationMarker = L.circle(currentLatLng, {
+                         radius: accuracy,
+                         color: 'blue', fillColor: '#30f', fillOpacity: 0.15, weight: 1
+                     }).addTo(state.mapInstance);
+                     // Add a center dot too
+                     L.circleMarker(currentLatLng, { radius: 4, color: 'white', fillColor: 'blue', fillOpacity: 1, weight: 1}).addTo(state.userLocationMarker); // Add to circle layer
+                 } else {
+                     state.userLocationMarker.setLatLng(currentLatLng);
+                     state.userLocationMarker.setRadius(accuracy);
+                     // Update center dot position if added separately
+                     if (state.userLocationMarker.getLayers && state.userLocationMarker.getLayers().length > 0) {
+                        state.userLocationMarker.getLayers()[0].setLatLng(currentLatLng);
+                     }
+                 }
+            } else if (!state.mapInstance && state.currentScreen === 'mapping') {
+                 // If map wasn't initialized yet (e.g., GPS faster than screen switch), initialize it now
+                 initializeMapView([lat, lon]);
+            }
+        }
 
         function handleLocationError(error) {
             console.error('Geolocation Error:', error.code, error.message);
              let message = 'GPS Error';
+             let label = "ERROR";
              switch(error.code) {
-                case error.PERMISSION_DENIED: message = "GPS Permission Denied"; break;
-                case error.POSITION_UNAVAILABLE: message = "GPS Position Unavailable"; break;
-                case error.TIMEOUT: message = "GPS Timeout"; break;
+                case error.PERMISSION_DENIED: message = "GPS Permission Denied"; label="DENIED"; break;
+                case error.POSITION_UNAVAILABLE: message = "GPS Position Unavailable"; label="UNAVAIL"; break;
+                case error.TIMEOUT: message = "GPS Timeout"; label="TIMEOUT"; break;
             }
-             updateLocationStatus("BAD", "ERROR", message);
+             updateLocationStatus("BAD", label, message);
              state.currentLocation = null;
              state.isGPSReady = false;
              btnTagCone.disabled = true;
-             currentLocationMarker.style.display = 'none';
-             drawMap();
+             if (state.userLocationMarker && state.mapInstance) {
+                 state.mapInstance.removeLayer(state.userLocationMarker);
+                 state.userLocationMarker = null;
+             }
         }
 
         function updateLocationStatus(statusType, statusLabel, infoText = "Waiting for GPS...") {
@@ -1133,7 +873,7 @@
         }
 
         // ==== Storage Functions ====
-        const STORAGE_KEY = 'autocrossCharts';
+        const STORAGE_KEY = 'autocrossCharts_v2'; // Use new key if format changed significantly
 
         function saveCurrentChart(name) {
             if (state.cones.length === 0) {
@@ -1141,21 +881,22 @@
                 return false;
             }
 
+             // Extract only necessary data, exclude leafletMarker
+            const serializableCones = state.cones.map(c => ({
+                 latitude: c.latitude, longitude: c.longitude,
+                 type: c.type, rotation: c.rotation, id: c.id
+             }));
+
             const chartData = {
                 name: name,
-                 coneData: state.cones.map(c => ({
-                    latitude: c.latitude, longitude: c.longitude,
-                    type: c.type, rotation: c.rotation, id: c.id
-                })),
-                worldRotation: state.worldRotation,
+                coneData: serializableCones,
+                // worldRotation: state.worldRotation, // No longer relevant with Leaflet maps
                 createdAt: new Date().toISOString()
             };
 
             loadSavedCharts();
-            // Handle potential name collision before pushing
             const existingIndex = state.savedCharts.findIndex(c => c.name === name);
             if (existingIndex !== -1) {
-                 // Remove the existing chart if overwriting
                  state.savedCharts.splice(existingIndex, 1);
              }
             state.savedCharts.push(chartData);
@@ -1167,8 +908,7 @@
             } catch (e) {
                 console.error("Error saving to localStorage:", e);
                 alert("Error saving chart. Storage might be full.");
-                // Revert optimistic add/replace if save failed
-                 loadSavedCharts();
+                loadSavedCharts(); // Revert state if save failed
                  return false;
             }
         }
@@ -1176,17 +916,11 @@
         function loadSavedCharts() {
             try {
                 const storedCharts = localStorage.getItem(STORAGE_KEY);
-                if (storedCharts) {
-                     const parsed = JSON.parse(storedCharts);
-                     if (Array.isArray(parsed)) {
-                         state.savedCharts = parsed;
-                     } else {
-                         console.error("Stored chart data is not an array. Resetting.");
-                         state.savedCharts = [];
-                         localStorage.removeItem(STORAGE_KEY);
-                     }
-                } else {
-                    state.savedCharts = [];
+                state.savedCharts = storedCharts ? JSON.parse(storedCharts) : [];
+                if (!Array.isArray(state.savedCharts)) { // Basic validation
+                     console.warn("Stored chart data is not an array. Resetting.");
+                     state.savedCharts = [];
+                     localStorage.removeItem(STORAGE_KEY);
                 }
             } catch (e) {
                 console.error("Error loading charts from localStorage:", e);
@@ -1195,7 +929,9 @@
              return state.savedCharts;
         }
 
-         function deleteChart(chartNameToDelete) {
+        // deleteChart, deleteAllCharts, exportChart, importChartFromFile, triggerImport remain largely the same
+        // as they operate on the saved data structure (which hasn't changed much)
+        function deleteChart(chartNameToDelete) {
             if (!confirm(`Are you sure you want to delete the chart "${chartNameToDelete}"? This cannot be undone.`)) {
                  return;
             }
@@ -1236,13 +972,14 @@
                  return;
              }
             try {
+                 // Ensure we only export the core data
                  const exportData = {
                      name: chart.name,
                      coneData: chart.coneData.map(c => ({
                          latitude: c.latitude, longitude: c.longitude,
-                         type: c.type, rotation: c.rotation
+                         type: c.type, rotation: c.rotation, id: c.id // Keep ID if needed for imports?
                      })),
-                     worldRotation: chart.worldRotation || 0,
+                     // worldRotation: chart.worldRotation || 0, // No longer needed
                      createdAt: chart.createdAt
                  };
 
@@ -1267,71 +1004,60 @@
 
         function importChartFromFile(file) {
             const reader = new FileReader();
-
             reader.onload = function(e) {
                 try {
                     const importedData = JSON.parse(e.target.result);
+                    // Validation... (ensure name, coneData array, lat/lon/type exist)
+                     if (typeof importedData !== 'object' || importedData === null) throw new Error("Invalid file format.");
+                     if (typeof importedData.name !== 'string' || !importedData.name.trim()) throw new Error("Chart name missing.");
+                     if (!Array.isArray(importedData.coneData)) throw new Error("Invalid cone data.");
 
-                    if (typeof importedData !== 'object' || importedData === null) throw new Error("Invalid file format (not an object).");
-                    if (typeof importedData.name !== 'string' || !importedData.name.trim()) throw new Error("Chart name missing or invalid.");
-                    if (!Array.isArray(importedData.coneData)) throw new Error("Invalid cone data format (not an array).");
-                    if (importedData.coneData.length === 0) throw new Error("Chart contains no cones.");
-
-                    for(const cone of importedData.coneData) {
+                     // Basic validation of cone structure
+                     for(const cone of importedData.coneData) {
                          if (typeof cone.latitude !== 'number' || typeof cone.longitude !== 'number' || typeof cone.type !== 'string') {
                              throw new Error("Invalid data structure within coneData.");
                          }
-                         cone.rotation = typeof cone.rotation === 'number' ? cone.rotation : 0;
-                    }
+                         cone.rotation = typeof cone.rotation === 'number' ? cone.rotation : 0; // Default rotation
+                     }
+
 
                      loadSavedCharts();
                      const existingChart = state.savedCharts.find(c => c.name === importedData.name);
                      if (existingChart) {
                          if (!confirm(`A chart named "${importedData.name}" already exists. Overwrite it?`)) {
                              alert("Import cancelled.");
-                             importFileInput.value = ''; // Reset file input
-                             return;
+                             importFileInput.value = ''; return;
                          }
                           state.savedCharts = state.savedCharts.filter(c => c.name !== importedData.name);
                      }
 
-                     const newChart = {
-                         ...importedData,
-                         worldRotation: importedData.worldRotation || 0,
+                     const newChart = { // Reconstruct to ensure format
+                         name: importedData.name,
+                         coneData: importedData.coneData, // Already validated somewhat
                          createdAt: importedData.createdAt || new Date().toISOString()
                      };
 
                     state.savedCharts.push(newChart);
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(state.savedCharts));
-
                     alert(`Chart "${newChart.name}" imported successfully!`);
-                    if(state.currentScreen === 'savedCharts') {
-                         updateChartsList(); // Refresh list if user is viewing it
-                     }
+                    if(state.currentScreen === 'savedCharts') updateChartsList();
 
                 } catch (error) {
                     console.error("Error importing chart:", error);
                     alert('Error importing chart: ' + error.message);
                 } finally {
-                     importFileInput.value = ''; // Always reset file input
+                     importFileInput.value = '';
                  }
             };
-
-             reader.onerror = function() {
-                 alert('Error reading the selected file.');
-                 importFileInput.value = '';
-             };
-
+             reader.onerror = function() { alert('Error reading the selected file.'); importFileInput.value = ''; };
             reader.readAsText(file);
         }
 
-        function triggerImport() {
-             importFileInput.click();
-         }
+        function triggerImport() { importFileInput.click(); }
 
-
+        // updateChartsList remains the same, just displays data from state.savedCharts
         function updateChartsList() {
-            loadSavedCharts();
+            loadSavedCharts(); // Ensure list is current
 
             if (state.savedCharts.length === 0) {
                 noChartsMessage.style.display = 'block';
@@ -1340,13 +1066,11 @@
             } else {
                 noChartsMessage.style.display = 'none';
                 chartsList.style.display = 'block';
-                chartsList.innerHTML = '';
+                chartsList.innerHTML = ''; // Clear existing list
 
-                const sortedCharts = [...state.savedCharts].sort((a, b) => {
-                     const dateA = a.createdAt ? new Date(a.createdAt) : 0;
-                     const dateB = b.createdAt ? new Date(b.createdAt) : 0;
-                     return dateB - dateA;
-                 });
+                const sortedCharts = [...state.savedCharts].sort((a, b) =>
+                    (b.createdAt || 0).localeCompare(a.createdAt || 0) // Sort descending by date string
+                );
 
                 sortedCharts.forEach(chart => {
                     const li = document.createElement('li');
@@ -1362,43 +1086,41 @@
                     if (chart.createdAt) {
                          try { dateStr = new Date(chart.createdAt).toLocaleDateString(); } catch (e) {}
                      }
-                    detailsSpan.textContent = `${chart.coneData.length} cones (${dateStr})`;
+                    const coneCount = Array.isArray(chart.coneData) ? chart.coneData.length : 0;
+                    detailsSpan.textContent = `${coneCount} cones (${dateStr})`;
 
                      const deleteBtn = document.createElement('button');
                      deleteBtn.className = 'danger';
                      deleteBtn.textContent = 'Del';
-                     deleteBtn.onclick = (e) => {
-                         e.stopPropagation();
-                         deleteChart(chart.name);
-                     };
+                     deleteBtn.onclick = (e) => { e.stopPropagation(); deleteChart(chart.name); };
 
                     li.appendChild(nameSpan);
                     li.appendChild(detailsSpan);
                     li.appendChild(deleteBtn);
 
-                    li.addEventListener('click', () => {
-                        viewChart(chart);
-                    });
-
+                    li.addEventListener('click', () => { viewChart(chart); });
                     chartsList.appendChild(li);
                 });
             }
         }
 
-        function viewChart(chart) {
-            state.currentViewingChart = chart;
 
+        function viewChart(chart) {
+            if (!chart || !Array.isArray(chart.coneData)) {
+                alert("Invalid chart data.");
+                return;
+            }
+            state.currentViewingChart = chart;
             chartName.textContent = chart.name;
 
-            state.chartViewRotation = chart.worldRotation || 0;
-            state.chartViewZoom = 1.0;
+            // Determine center point (e.g., first cone or average)
+             let centerCoords = [0, 0]; // Default fallback
+             if (chart.coneData.length > 0) {
+                 centerCoords = [chart.coneData[0].latitude, chart.coneData[0].longitude];
+             }
 
-            chartRotationSlider.value = state.chartViewRotation;
-            chartRotationValue.textContent = `${Math.round(state.chartViewRotation)}°`;
-            chartZoomSlider.value = state.chartViewZoom;
-            chartZoomValue.textContent = `${state.chartViewZoom.toFixed(1)}x`;
-
-            navigateToScreen('chartView'); // Navigate AFTER setting state
+            // Navigate will handle map initialization
+            navigateToScreen('chartView');
         }
 
         function generateChartName() {
@@ -1409,49 +1131,82 @@
         }
 
         // ==== Navigation ====
-        // Updated navigateToScreen to reset chart view offset
         function navigateToScreen(screenId) {
+            console.log("Navigating to:", screenId);
             Object.values(screens).forEach(screen => screen.classList.remove('active'));
 
              if (screens[screenId]) {
                  screens[screenId].classList.add('active');
+                 const oldScreen = state.currentScreen;
                  state.currentScreen = screenId;
 
+                // --- Screen Specific Setup ---
                 switch(screenId) {
                     case 'mapping':
-                         state.cones = [];
-                         state.offsetX = 0;
-                         state.offsetY = 0;
-                         state.zoomScale = 1.0;
-                         state.worldRotation = 0;
-                         state.selectedConeIndex = null;
-                         zoomSlider.value = state.zoomScale;
-                         zoomValue.textContent = `${state.zoomScale.toFixed(1)}x`;
-                         worldRotationSlider.value = state.worldRotation;
-                         rotationValue.textContent = `${Math.round(state.worldRotation)}°`;
-                         deselectCone();
-                         updateSaveButtonState();
-                        resizeCanvas();
-                        initGeolocation();
+                        stopGeolocation(); // Stop first if running from previous state
+                        // Reset mapping state (cones, selection)
+                        state.cones = [];
+                        state.selectedConeIndex = null;
+                        deselectCone(); // Update UI related to selection
+                        if(state.coneMarkersLayer) state.coneMarkersLayer.clearLayers(); // Clear map layers
+
+                        // Use last known good GPS coords if available, else 0,0
+                        const startCoords = state.currentLocation ? [state.currentLocation.latitude, state.currentLocation.longitude] : [0, 0];
+                        initializeMapView(startCoords); // Init/Re-init map
+                        updateSaveButtonState();
+                        initGeolocation(); // Start GPS for this screen
                         break;
+
                     case 'savedCharts':
-                        stopGeolocation();
+                        stopGeolocation(); // Stop GPS if coming from mapping
+                        // Clean up map instances if they exist
+                         if (state.mapInstance) { state.mapInstance.remove(); state.mapInstance = null; }
+                         if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; }
                         updateChartsList();
                         break;
+
                     case 'chartView':
-                         stopGeolocation();
-                         // Reset chart view pan offset when loading a chart
-                         state.chartViewOffsetX = 0;
-                         state.chartViewOffsetY = 0;
-                         resizeCanvas();
-                         drawChartView();
-                        break;
+                         stopGeolocation(); // Stop GPS if coming from mapping
+                         if (!state.currentViewingChart) {
+                             console.error("Cannot navigate to chart view without a chart selected.");
+                             navigateToScreen('savedCharts'); // Go back
+                             return;
+                         }
+                         let centerCoords = [0, 0];
+                         if (state.currentViewingChart.coneData.length > 0) {
+                             centerCoords = [state.currentViewingChart.coneData[0].latitude, state.currentViewingChart.coneData[0].longitude];
+                         }
+                         // Initialize chart map view
+                         initializeChartView(centerCoords, INITIAL_CHART_ZOOM, state.currentViewingChart.coneData);
+                         break;
+
                     case 'mainMenu':
                          stopGeolocation();
                          state.currentViewingChart = null;
                          state.cones = []; // Clear mapping cones when going home
+                         // Clean up map instances
+                         if (state.mapInstance) { state.mapInstance.remove(); state.mapInstance = null; }
+                         if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; }
                          break;
                  }
+
+                 // Invalidate size after screen transition IF map exists for the new screen
+                 // Use timeout to ensure layout is complete
+                 setTimeout(() => {
+                     if (screenId === 'mapping' && state.mapInstance) {
+                         console.log("Invalidating map size");
+                         state.mapInstance.invalidateSize();
+                     } else if (screenId === 'chartView' && state.chartMapInstance) {
+                         console.log("Invalidating chart map size");
+                         state.chartMapInstance.invalidateSize();
+                         // Re-fit bounds after invalidate might be needed
+                         if (state.currentViewingChart && state.currentViewingChart.coneData.length > 0) {
+                             const bounds = L.latLngBounds(state.currentViewingChart.coneData.map(c => [c.latitude, c.longitude]));
+                              if (bounds.isValid()) state.chartMapInstance.fitBounds(bounds.pad(0.1));
+                          }
+                     }
+                 }, 100); // Small delay
+
             } else {
                  console.error("Screen ID not found:", screenId);
              }
@@ -1459,126 +1214,20 @@
 
         // ==== Event Handlers ====
 
-        // -- Canvas Interaction Helpers --
-        // Updated getCanvasCoords to take target canvas
-        function getCanvasCoords(event, targetCanvas) {
-            const rect = targetCanvas.getBoundingClientRect();
-             let clientX, clientY;
-             if (event.touches && event.touches.length > 0) {
-                 clientX = event.touches[0].clientX;
-                 clientY = event.touches[0].clientY;
-             } else if (event.changedTouches && event.changedTouches.length > 0) {
-                 clientX = event.changedTouches[0].clientX;
-                 clientY = event.changedTouches[0].clientY;
-            } else {
-                 clientX = event.clientX;
-                 clientY = event.clientY;
-             }
-            return {
-                x: clientX - rect.left,
-                y: clientY - rect.top
-            };
-        }
-
-        // -- Mapping Canvas Interaction --
-        function handlePointerDown(event) {
-            event.preventDefault();
-            const coords = getCanvasCoords(event, mappingCanvas); // Pass mappingCanvas
-            state.lastInteractionX = coords.x;
-            state.lastInteractionY = coords.y;
-
-            const tappedConeIndex = findConeAt(coords.x, coords.y);
-
-            if (tappedConeIndex !== null) {
-                 selectCone(tappedConeIndex);
-                 state.isDraggingCone = true;
-                 state.isDraggingMap = false;
-                 mappingCanvas.style.cursor = 'grabbing';
-            } else {
-                 deselectCone();
-                 state.isDraggingMap = true;
-                 state.isDraggingCone = false;
-                 mappingCanvas.style.cursor = 'grabbing';
-            }
-        }
-
-        function handlePointerMove(event) {
-            if (!state.isDraggingMap && !state.isDraggingCone) return;
-            event.preventDefault();
-
-            const coords = getCanvasCoords(event, mappingCanvas); // Pass mappingCanvas
-            const deltaX = coords.x - state.lastInteractionX;
-            const deltaY = coords.y - state.lastInteractionY;
-
-            if (state.isDraggingMap) {
-                state.offsetX += deltaX;
-                state.offsetY += deltaY;
-                 drawMap();
-            } else if (state.isDraggingCone) {
-                 moveSelectedCone(deltaX, deltaY);
-            }
-
-            state.lastInteractionX = coords.x;
-            state.lastInteractionY = coords.y;
-        }
-
-        function handlePointerUp(event) {
-             if (state.isDraggingMap || state.isDraggingCone) {
-                event.preventDefault();
-             }
-             state.isDraggingMap = false;
-             state.isDraggingCone = false;
-             mappingCanvas.style.cursor = 'grab';
-         }
-
-        // -- Chart View Canvas Interaction --
-        function handleChartViewPointerDown(event) {
-            event.preventDefault();
-            const coords = getCanvasCoords(event, chartViewCanvas); // Use chart canvas
-            state.isDraggingChartView = true;
-            state.lastChartViewInteractionX = coords.x;
-            state.lastChartViewInteractionY = coords.y;
-            chartViewCanvas.style.cursor = 'grabbing';
-        }
-
-        function handleChartViewPointerMove(event) {
-            if (!state.isDraggingChartView) return;
-            event.preventDefault();
-            const coords = getCanvasCoords(event, chartViewCanvas); // Use chart canvas
-            const deltaX = coords.x - state.lastChartViewInteractionX;
-            const deltaY = coords.y - state.lastChartViewInteractionY;
-
-            state.chartViewOffsetX += deltaX;
-            state.chartViewOffsetY += deltaY;
-
-            state.lastChartViewInteractionX = coords.x;
-            state.lastChartViewInteractionY = coords.y;
-
-            drawChartView();
-        }
-
-        function handleChartViewPointerUp(event) {
-            if (state.isDraggingChartView) {
-                event.preventDefault();
-            }
-            state.isDraggingChartView = false;
-            chartViewCanvas.style.cursor = 'grab';
-        }
-
+        // REMOVED: Canvas Interaction Handlers (handlePointerDown, etc.)
 
         // -- Button Clicks --
         newChartButton.addEventListener('click', () => navigateToScreen('mapping'));
         savedChartsButton.addEventListener('click', () => navigateToScreen('savedCharts'));
         backToMainButton.addEventListener('click', () => navigateToScreen('mainMenu'));
         backFromChartsButton.addEventListener('click', () => navigateToScreen('mainMenu'));
-        backFromChartViewButton.addEventListener('click', () => navigateToScreen('savedCharts'));
+        backFromChartViewButton.addEventListener('click', () => navigateToScreen('savedCharts')); // Go back to list
 
         btnPointerCone.addEventListener('click', () => {
             state.selectedConeType = ConeType.POINTER;
             btnPointerCone.classList.add('active');
             btnSingleCone.classList.remove('active');
         });
-
         btnSingleCone.addEventListener('click', () => {
             state.selectedConeType = ConeType.SINGLE;
             btnSingleCone.classList.add('active');
@@ -1610,104 +1259,69 @@
         accuracyThresholdSlider.addEventListener('input', () => {
             state.gpsAccuracyThreshold = parseFloat(accuracyThresholdSlider.value);
             accuracyThresholdValue.textContent = `${state.gpsAccuracyThreshold.toFixed(1)} m`;
+            // Re-evaluate GPS status if location is known
             if (state.currentLocation) {
-                 handleLocationUpdate({ coords: state.currentLocation }); // Re-evaluate accuracy
-             }
+                handleLocationUpdate({ coords: state.currentLocation }); // Fake update to re-check status
+            }
         });
 
-        zoomSlider.addEventListener('input', () => {
-            state.zoomScale = parseFloat(zoomSlider.value);
-            zoomValue.textContent = `${state.zoomScale.toFixed(1)}x`;
-            drawMap();
-        });
-
-        worldRotationSlider.addEventListener('input', () => {
-            state.worldRotation = parseFloat(worldRotationSlider.value);
-            rotationValue.textContent = `${Math.round(state.worldRotation)}°`;
-            drawMap();
-        });
+        // REMOVED: zoomSlider, worldRotationSlider listeners
 
         pointerRotationSlider.addEventListener('input', () => {
              const rotation = parseFloat(pointerRotationSlider.value);
              state.pointerConeRotation = rotation; // Update default for next cone
              pointerRotationValue.textContent = `${Math.round(rotation)}°`;
-             updateSelectedConeRotation(rotation); // Update the currently selected cone
+             updateSelectedConeRotation(rotation); // Update the currently selected cone's marker
          });
 
-        chartZoomSlider.addEventListener('input', () => {
-            state.chartViewZoom = parseFloat(chartZoomSlider.value);
-            chartZoomValue.textContent = `${state.chartViewZoom.toFixed(1)}x`;
-            drawChartView();
-        });
-
-        chartRotationSlider.addEventListener('input', () => {
-            state.chartViewRotation = parseFloat(chartRotationSlider.value);
-            chartRotationValue.textContent = `${Math.round(state.chartViewRotation)}°`;
-            drawChartView();
-        });
+        // REMOVED: chartZoomSlider, chartRotationSlider listeners
 
         // -- Modal Actions --
         confirmSaveButton.addEventListener('click', () => {
             const name = chartNameInput.value.trim();
             if (!name) {
-                alert('Please enter a valid chart name.');
-                return;
+                alert('Please enter a valid chart name.'); return;
             }
-             loadSavedCharts(); // Ensure we check against the latest list
+             loadSavedCharts(); // Check against latest list
              const existing = state.savedCharts.find(c => c.name === name);
              if (existing) {
-                 if (!confirm(`A chart named "${name}" already exists. Overwrite it?`)) {
-                     return;
-                 }
+                 if (!confirm(`A chart named "${name}" already exists. Overwrite it?`)) return;
              }
-            if (saveCurrentChart(name)) { // saveCurrentChart now handles replacing
+            if (saveCurrentChart(name)) {
                  modal.style.display = 'none';
+                 // Maybe navigate back to main menu or saved charts after save?
+                 // navigateToScreen('savedCharts');
              }
         });
-
-        cancelSaveButton.addEventListener('click', () => {
-            modal.style.display = 'none';
-        });
+        cancelSaveButton.addEventListener('click', () => { modal.style.display = 'none'; });
 
 
         // ==== Initialization ====
         function initApp() {
-             // Set cursor styles
-             mappingCanvas.style.cursor = 'grab';
-             chartViewCanvas.style.cursor = 'grab';
+             console.log("Autocross Mapper Initializing (Leaflet Version)...");
+             // REMOVED: Canvas listeners
 
-            // Attach Mapping Canvas listeners
-            mappingCanvas.addEventListener('mousedown', handlePointerDown);
-            mappingCanvas.addEventListener('mousemove', handlePointerMove);
-            mappingCanvas.addEventListener('mouseup', handlePointerUp);
-            mappingCanvas.addEventListener('mouseleave', handlePointerUp);
-            mappingCanvas.addEventListener('touchstart', handlePointerDown, { passive: false });
-            mappingCanvas.addEventListener('touchmove', handlePointerMove, { passive: false });
-            mappingCanvas.addEventListener('touchend', handlePointerUp, { passive: false });
-            mappingCanvas.addEventListener('touchcancel', handlePointerUp, { passive: false });
+             // Initial setup
+             loadSavedCharts();
+             navigateToScreen('mainMenu'); // Start at main menu
 
-            // Attach Chart View Canvas listeners
-            chartViewCanvas.addEventListener('mousedown', handleChartViewPointerDown);
-            chartViewCanvas.addEventListener('mousemove', handleChartViewPointerMove);
-            chartViewCanvas.addEventListener('mouseup', handleChartViewPointerUp);
-            chartViewCanvas.addEventListener('mouseleave', handleChartViewPointerUp);
-            chartViewCanvas.addEventListener('touchstart', handleChartViewPointerDown, { passive: false });
-            chartViewCanvas.addEventListener('touchmove', handleChartViewPointerMove, { passive: false });
-            chartViewCanvas.addEventListener('touchend', handleChartViewPointerUp, { passive: false });
-            chartViewCanvas.addEventListener('touchcancel', handleChartViewPointerUp, { passive: false });
+             // Leaflet handles map resize automatically usually, but listen for window resize for potential layout shifts
+             window.addEventListener('resize', () => {
+                  // Invalidate map size slightly after resize event settles
+                  setTimeout(() => {
+                      if (state.currentScreen === 'mapping' && state.mapInstance) {
+                          state.mapInstance.invalidateSize();
+                      } else if (state.currentScreen === 'chartView' && state.chartMapInstance) {
+                          state.chartMapInstance.invalidateSize();
+                      }
+                  }, 250);
+              });
 
-            // Initial setup
-            loadSavedCharts();
-            resizeCanvas();
-            navigateToScreen('mainMenu'); // Start at main menu
 
-            // Add listener for window resize
-            window.addEventListener('resize', resizeCanvas);
-
-            console.log("Autocross Mapper Initialized");
+            console.log("Autocross Mapper Initialized.");
         }
 
-        // Start the app when the DOM is fully loaded
+        // Start the app
         window.addEventListener('load', initApp);
 
     </script>
