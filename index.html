@@ -350,11 +350,64 @@
             if (index >= 0) { marker.on('click', (e) => { const currentIdx = state.cones.findIndex(c => c.id === cone.id); if (currentIdx !== -1) selectCone(currentIdx); }); if (draggable) { marker.on('dragend', (e) => { const draggedMarker = e.target; const finalLatLng = draggedMarker.getLatLng(); const coneIndex = state.cones.findIndex(c => c.leafletMarker === draggedMarker); if (coneIndex !== -1) { let originalLatLng = finalLatLng; if (state.rotationCenter && state.worldRotation !== 0) { const centerLatLng = L.latLng(state.rotationCenter.lat, state.rotationCenter.lng); originalLatLng = rotateLatLngAroundCenter(map, finalLatLng, centerLatLng, -state.worldRotation); } state.cones[coneIndex].latitude = originalLatLng.lat; state.cones[coneIndex].longitude = originalLatLng.lng; createOrUpdateConeMarker(state.cones[coneIndex], coneIndex, true); console.log(`Cone ${coneIndex} dragend. Stored original @ ${originalLatLng.lat.toFixed(6)}, ${originalLatLng.lng.toFixed(6)}`); updateSaveButtonState(); } }); } }
             marker.addTo(layerGroup); if (index >= 0 && index === state.selectedConeIndex && marker._icon) L.DomUtil.addClass(marker._icon, 'selected');
         }
-        function tagCone() { /* ... same as before ... */ if (!state.currentLocation || !state.isGPSReady || !state.mapInstance || !state.coneMarkersLayer) { alert("GPS/Map not ready."); return; } let coneType = (state.cones.length < 2) ? ConeType.STARTING : state.selectedConeType; let coneRotation = (coneType === ConeType.POINTER) ? state.pointerConeRotation : 0; const newCone = new Cone(state.currentLocation.latitude, state.currentLocation.longitude, coneType, coneRotation); if (state.cones.length === 0) { state.rotationCenter = { lat: newCone.latitude, lng: newCone.longitude }; state.worldRotation = 0; worldRotationSlider.value = 0; rotationValue.textContent = `0°`; console.log("Rotation center set:", state.rotationCenter); } state.cones.push(newCone); const newIndex = state.cones.length - 1; createOrUpdateConeMarker(newCone, newIndex, true); updateSaveButtonState(); if (newCone.type === ConeType.POINTER) { selectCone(newIndex); } else { deselectCone(); } }
+        function tagCone() { 
+            if (!state.currentLocation || !state.isGPSReady || !state.mapInstance || !state.coneMarkersLayer) { 
+                alert("GPS/Map not ready."); 
+                return; 
+            } 
+            
+            let coneType = (state.cones.length < 2) ? ConeType.STARTING : state.selectedConeType; 
+            
+            // Store the true real-world rotation for pointer cones
+            // This is the absolute direction in the real world, regardless of map rotation
+            let coneRotation = 0;
+            if (coneType === ConeType.POINTER) {
+                // Use the pointer rotation from the slider
+                coneRotation = state.pointerConeRotation;
+                console.log(`Creating pointer cone with real-world rotation: ${coneRotation}°`);
+            }
+            
+            const newCone = new Cone(state.currentLocation.latitude, state.currentLocation.longitude, coneType, coneRotation); 
+            
+            if (state.cones.length === 0) { 
+                state.rotationCenter = { lat: newCone.latitude, lng: newCone.longitude }; 
+                state.worldRotation = 0; 
+                worldRotationSlider.value = 0; 
+                rotationValue.textContent = `0°`; 
+                console.log("Rotation center set:", state.rotationCenter); 
+            } 
+            
+            state.cones.push(newCone); 
+            const newIndex = state.cones.length - 1; 
+            createOrUpdateConeMarker(newCone, newIndex, true); 
+            updateSaveButtonState(); 
+            
+            if (newCone.type === ConeType.POINTER) { 
+                selectCone(newIndex); 
+            } else { 
+                deselectCone(); 
+            } 
+        }
         function deleteLastCone() { /* ... same as before ... */ if (state.cones.length > 0 && state.coneMarkersLayer) { const deletedConeIndex = state.cones.length - 1; const deletedCone = state.cones.pop(); if (deletedCone.leafletMarker) { try {state.coneMarkersLayer.removeLayer(deletedCone.leafletMarker);} catch(e){} } if (state.selectedConeIndex === deletedConeIndex) deselectCone(); updateSaveButtonState(); } }
         function selectCone(index) { /* ... same as before ... */ if (index === null || index < 0 || index >= state.cones.length || state.currentScreen !== 'mapping') { deselectCone(); return; } const coneToSelect = state.cones[index]; if (!coneToSelect) return; if (state.selectedConeIndex !== null && state.selectedConeIndex < state.cones.length) { const prevCone = state.cones[state.selectedConeIndex]; if (prevCone?.leafletMarker?._icon) L.DomUtil.removeClass(prevCone.leafletMarker._icon, 'selected'); } state.selectedConeIndex = index; if (coneToSelect.leafletMarker?._icon) L.DomUtil.addClass(coneToSelect.leafletMarker._icon, 'selected'); if (coneToSelect.type === ConeType.POINTER) { state.pointerConeRotation = coneToSelect.rotation; pointerRotationSlider.value = coneToSelect.rotation; pointerRotationValue.textContent = `${Math.round(coneToSelect.rotation)}°`; pointerRotationContainer.style.display = 'flex'; selectedConeIndicator.style.display = 'block'; } else { pointerRotationContainer.style.display = 'none'; selectedConeIndicator.style.display = 'none'; } }
         function deselectCone() { /* ... same as before ... */ if (state.selectedConeIndex !== null && state.selectedConeIndex < state.cones.length) { const prevCone = state.cones[state.selectedConeIndex]; if (prevCone?.leafletMarker?._icon) L.DomUtil.removeClass(prevCone.leafletMarker._icon, 'selected'); } state.selectedConeIndex = null; pointerRotationContainer.style.display = 'none'; selectedConeIndicator.style.display = 'none'; }
-        function updateSelectedConeRotation(rotation) { /* ... same as before ... */ if (state.selectedConeIndex !== null && state.cones[state.selectedConeIndex]) { const cone = state.cones[state.selectedConeIndex]; if (cone.type === ConeType.POINTER) { cone.rotation = rotation; let displayRotation = rotation + state.worldRotation; if (cone.leafletMarker && typeof cone.leafletMarker.setRotationAngle === 'function') { cone.leafletMarker.setRotationAngle(displayRotation); } updateSaveButtonState(); } } }
+        function updateSelectedConeRotation(rotation) { 
+            if (state.selectedConeIndex !== null && state.cones[state.selectedConeIndex]) { 
+                const cone = state.cones[state.selectedConeIndex]; 
+                if (cone.type === ConeType.POINTER) { 
+                    // Update the true real-world rotation value
+                    cone.rotation = rotation;
+                    console.log(`Updated pointer cone rotation to: ${rotation}°`);
+                    
+                    // Apply the rotation directly - this is the absolute real-world direction
+                    if (cone.leafletMarker && typeof cone.leafletMarker.setRotationAngle === 'function') {
+                        cone.leafletMarker.setRotationAngle(rotation);
+                    }
+                    
+                    updateSaveButtonState(); 
+                } 
+            } 
+        }
         function updateSaveButtonState() { saveButton.disabled = state.cones.length === 0; }
 
         // ==== Geolocation and Device Orientation Functions ====
@@ -465,17 +518,17 @@
             // This keeps markers pointing in their original world direction
             state.cones.forEach(cone => {
                 if (cone.leafletMarker && typeof cone.leafletMarker.setRotationAngle === 'function') {
-                    let markerRotation = 0;
                     if (cone.type === ConeType.POINTER) {
-                        // For pointer cones, we need to account for both their inherent rotation
-                        // and the map rotation (but in the opposite direction to stay visually consistent)
-                        markerRotation = cone.rotation - state.worldRotation;
+                        // For pointer cones, apply their true real-world angle
+                        // We don't adjust for map rotation because we want them to
+                        // maintain their exact real-world direction regardless of the map's rotation
+                        const absoluteRealWorldRotation = cone.rotation;
+                        cone.leafletMarker.setRotationAngle(absoluteRealWorldRotation);
                     } else {
                         // For regular cones, just counter-rotate by the map rotation
-                        markerRotation = -state.worldRotation;
+                        // to maintain their visual appearance
+                        cone.leafletMarker.setRotationAngle(-state.worldRotation);
                     }
-                    
-                    cone.leafletMarker.setRotationAngle(markerRotation);
                 }
             });
             
