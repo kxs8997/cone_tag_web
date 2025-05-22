@@ -39,10 +39,16 @@
 
         /* Leaflet Map Container */
         #map, #chart-map {
-            flex-grow: 1; background-color: #333; width: 100%;
+            flex-grow: 1; background-color: #222; width: 100%;
             z-index: 1; cursor: grab;
+            transition: background-color 0.3s ease; /* Smooth transition for bg toggle */
          }
         #map:active, #chart-map:active { cursor: grabbing; }
+        /* Style when map background tiles are hidden */
+        #map.map-background-hidden,
+        #chart-map.map-background-hidden {
+            background-color: #333; /* Dark grey background when tiles off */
+        }
 
         /* Selected Cone Indicator */
         .selected-cone-indicator { position: absolute; top: 55px; left: 10px; padding: 5px 10px; background-color: rgba(251, 188, 5, 0.8); color: black; border-radius: 15px; font-weight: bold; font-size: 12px; display: none; z-index: 600; }
@@ -147,6 +153,10 @@
                 <div class="control-row">
                     <button id="btn-auto-rotate" class="primary">Auto-Rotate Map</button>
                 </div>
+                <!-- Map Toggle Button -->
+                <div class="control-row">
+                    <button id="toggle-map-bg-mapping" class="warning">Show Map</button>
+                </div>
             </div>
         </div>
     </div>
@@ -179,6 +189,10 @@
             </div>
             <div id="chart-map"></div> <!-- Chart map container -->
             <div id="controls">
+                <!-- Map Toggle Button -->
+                <div class="control-row">
+                    <button id="toggle-map-bg-chart" class="warning">Show Map</button>
+                </div>
             </div>
         </div>
     </div>
@@ -224,10 +238,13 @@
         const locationInfo = document.getElementById('location-info'); const accuracyStatus = document.getElementById('accuracy-status'); const saveButton = document.getElementById('save-button'); const mapContainer = document.getElementById('map'); const selectedConeIndicator = document.getElementById('selected-cone-indicator'); const accuracyThresholdSlider = document.getElementById('accuracy-threshold-slider'); const accuracyThresholdValue = document.getElementById('accuracy-threshold-value'); const btnPointerCone = document.getElementById('btn-pointer-cone'); const btnSingleCone = document.getElementById('btn-single-cone'); const btnTagCone = document.getElementById('btn-tag-cone'); const btnDeleteLastCone = document.getElementById('btn-delete-last-cone'); const pointerRotationContainer = document.getElementById('pointer-rotation-container'); const pointerRotationSlider = document.getElementById('pointer-rotation-slider'); const pointerRotationValue = document.getElementById('pointer-rotation-value');
         const worldRotationSlider = document.getElementById('world-rotation-slider'); const rotationValue = document.getElementById('rotation-value');
         const btnAutoRotate = document.getElementById('btn-auto-rotate');
-        // Saved Charts Screen Elements
-        const chartsContainer = document.getElementById('charts-container'); const noChartsMessage = document.getElementById('no-charts-message'); const chartsList = document.getElementById('charts-list'); const importChartButtonMain = document.getElementById('import-chart-button-main'); const importChartButtonSaved = document.getElementById('import-chart-button-saved'); const deleteAllChartsButton = document.getElementById('delete-all-charts-button');
+        const toggleMapBgMappingButton = document.getElementById('toggle-map-bg-mapping');
         // Chart View Screen Elements
         const chartMapContainer = document.getElementById('chart-map'); const chartName = document.getElementById('chart-name'); const exportCurrentChartButton = document.getElementById('export-current-chart-button');
+        const toggleMapBgChartButton = document.getElementById('toggle-map-bg-chart');
+        // Saved Charts Screen Elements
+        const chartsContainer = document.getElementById('charts-container'); const noChartsMessage = document.getElementById('no-charts-message'); const chartsList = document.getElementById('charts-list'); const importChartButtonMain = document.getElementById('import-chart-button-main'); const importChartButtonSaved = document.getElementById('import-chart-button-saved'); const deleteAllChartsButton = document.getElementById('delete-all-charts-button');
+        // Chart View Screen Elements removed (already defined above)
         // Modal Elements
         const modal = document.getElementById('modal'); const chartNameInput = document.getElementById('chart-name-input'); const cancelSaveButton = document.getElementById('cancel-save'); const confirmSaveButton = document.getElementById('confirm-save');
         // Hidden File Input
@@ -424,6 +441,39 @@
                 btnAutoRotate.classList.add('primary');
             }
         }
+        
+        // ==== Map Background Toggle Function ====
+        function toggleMapBackground() {
+            let mapInstance = null, tileLayer = null, button = null, container = null;
+            if (state.currentScreen === 'mapping' && state.mapInstance && state.mapTileLayer) { 
+                mapInstance = state.mapInstance; 
+                tileLayer = state.mapTileLayer; 
+                button = toggleMapBgMappingButton; 
+                container = mapContainer; 
+            }
+            else if (state.currentScreen === 'chartView' && state.chartMapInstance && state.chartTileLayer) { 
+                mapInstance = state.chartMapInstance; 
+                tileLayer = state.chartTileLayer; 
+                button = toggleMapBgChartButton; 
+                container = chartMapContainer; 
+            }
+            else { 
+                console.warn("Cannot toggle map background: No active/valid map."); 
+                return; 
+            }
+
+            if (mapInstance.hasLayer(tileLayer)) { // Hide
+                mapInstance.removeLayer(tileLayer); 
+                button.textContent = "Show Map"; 
+                container.classList.add('map-background-hidden'); 
+                console.log("Map background hidden.");
+            } else { // Show
+                tileLayer.addTo(mapInstance); 
+                button.textContent = "Hide Map"; 
+                container.classList.remove('map-background-hidden'); 
+                console.log("Map background shown.");
+            }
+        }
 
         // ==== Storage Functions ====
         // ... saveCurrentChart, loadSavedCharts, deleteChart, deleteAllCharts, exportChart, importChartFromFile ...
@@ -484,6 +534,10 @@
             
             // Auto-rotate toggle button
             btnAutoRotate.addEventListener('click', toggleAutoRotate);
+            
+            // Register buttons for both maps
+            toggleMapBgMappingButton.addEventListener('click', toggleMapBackground);
+            toggleMapBgChartButton.addEventListener('click', toggleMapBackground);
             // -- Modal Actions --
             confirmSaveButton.addEventListener('click', () => { const name = chartNameInput.value.trim(); if (!name) { alert('Enter chart name.'); return; } loadSavedCharts(); const existing = state.savedCharts.find(c => c.name === name); if (existing && !confirm(`Overwrite chart "${name}"?`)) return; if (saveCurrentChart(name)) modal.style.display = 'none'; });
             cancelSaveButton.addEventListener('click', () => { modal.style.display = 'none'; });
