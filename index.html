@@ -265,9 +265,23 @@
         // ==== Leaflet Map Initialization ====
         function initializeMapView(centerCoords = [0, 0], zoom = INITIAL_MAP_ZOOM) {
             if (state.mapInstance) { state.mapInstance.remove(); state.mapInstance = null; }
+            if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; }
             if (!mapContainer) { console.error("Map container div not found!"); return; }
             console.log("Initializing main map view at", centerCoords, "zoom", zoom);
-            state.mapInstance = L.map(mapContainer, { center: centerCoords, zoom: zoom, zoomControl: true, attributionControl: true });
+            
+            // Add transform-origin CSS to the map container for proper rotation
+            mapContainer.style.transformOrigin = 'center center';
+            
+            state.mapInstance = L.map(mapContainer, { 
+                center: centerCoords, 
+                zoom: zoom, 
+                zoomControl: true, 
+                attributionControl: true,
+                // Disable built-in animations to prevent conflicts with our custom rotation
+                fadeAnimation: false,
+                markerZoomAnimation: false,
+                zoomAnimation: false
+            });
 
             if (!state.coneMarkersLayer) state.coneMarkersLayer = L.layerGroup(); else state.coneMarkersLayer.clearLayers();
             state.coneMarkersLayer.addTo(state.mapInstance);
@@ -281,7 +295,18 @@
              if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; }
              if (!chartMapContainer) { console.error("Chart map container div not found!"); return; }
              console.log("Initializing chart map view.");
-             state.chartMapInstance = L.map(chartMapContainer).setView(centerCoords, zoom);
+             
+             // Add transform-origin CSS to the chart map container for proper rotation
+             chartMapContainer.style.transformOrigin = 'center center';
+             
+             state.chartMapInstance = L.map(chartMapContainer, {
+                center: centerCoords,
+                zoom: zoom,
+                // Disable built-in animations to prevent conflicts with our custom rotation
+                fadeAnimation: false,
+                markerZoomAnimation: false,
+                zoomAnimation: false
+             });
 
              if (!state.chartMarkersLayer) state.chartMarkersLayer = L.layerGroup(); else state.chartMarkersLayer.clearLayers();
              state.chartMarkersLayer.addTo(state.chartMapInstance);
@@ -397,15 +422,57 @@
                         rotationValue.textContent = `${Math.round(mapRotation)}°`;
                     }
                     
-                    // Apply rotation to all cones
-                    applyWorldRotation();
+                    // Apply rotation to the entire map view
+                    rotateMapView();
                 }
             }
         }
         
+        function rotateMapView() {
+            // This function rotates the entire map view, including tiles and markers
+            if (!state.mapInstance) return;
+            
+            const mapContainer = state.mapInstance.getContainer();
+            if (!mapContainer) return;
+            
+            // Apply the rotation via CSS transform
+            mapContainer.style.transform = `rotate(${state.worldRotation}deg)`;
+            
+            // Update marker rotations to compensate for the map rotation
+            // This keeps markers pointing in their original world direction
+            state.cones.forEach(cone => {
+                if (cone.leafletMarker && typeof cone.leafletMarker.setRotationAngle === 'function') {
+                    let markerRotation = 0;
+                    if (cone.type === ConeType.POINTER) {
+                        // For pointer cones, we need to account for both their inherent rotation
+                        // and the map rotation (but in the opposite direction to stay visually consistent)
+                        markerRotation = cone.rotation - state.worldRotation;
+                    } else {
+                        // For regular cones, just counter-rotate by the map rotation
+                        markerRotation = -state.worldRotation;
+                    }
+                    
+                    cone.leafletMarker.setRotationAngle(markerRotation);
+                }
+            });
+            
+            // If the user location marker exists, rotate it too
+            if (state.userLocationMarker) {
+                // User marker doesn't need rotation, as it's typically a circle
+            }
+        }
+        
+        // Original function kept for use with manual marker adjustment
         function applyWorldRotation() {
             if (!state.rotationCenter || !state.mapInstance) return;
             
+            // Reset map container rotation
+            const mapContainer = state.mapInstance.getContainer();
+            if (mapContainer) {
+                mapContainer.style.transform = 'rotate(0deg)';
+            }
+            
+            // Apply rotation to markers only
             state.cones.forEach(cone => {
                 if (cone.leafletMarker) {
                     let displayLatLng = L.latLng(cone.latitude, cone.longitude);
@@ -439,6 +506,27 @@
                 btnAutoRotate.textContent = 'Auto-Rotate Map';
                 btnAutoRotate.classList.remove('active');
                 btnAutoRotate.classList.add('primary');
+                
+                // Reset the map rotation when disabling auto-rotate
+                if (state.mapInstance) {
+                    const mapContainer = state.mapInstance.getContainer();
+                    if (mapContainer) {
+                        mapContainer.style.transform = 'rotate(0deg)';
+                    }
+                    
+                    // Reset world rotation state
+                    state.worldRotation = 0;
+                    worldRotationSlider.value = 0;
+                    rotationValue.textContent = '0°';
+                    
+                    // Reset marker rotations
+                    state.cones.forEach(cone => {
+                        if (cone.leafletMarker && typeof cone.leafletMarker.setRotationAngle === 'function') {
+                            const rotation = cone.type === ConeType.POINTER ? cone.rotation : 0;
+                            cone.leafletMarker.setRotationAngle(rotation);
+                        }
+                    });
+                }
             }
         }
         
@@ -529,8 +617,22 @@
                 
                 state.worldRotation = parseFloat(worldRotationSlider.value); 
                 rotationValue.textContent = `${Math.round(state.worldRotation)}°`; 
+                
+                // Use the marker-only rotation for manual adjustment
+                // This provides better control and visual feedback
                 applyWorldRotation();
             });
+            
+            // Handle map container interactions
+            // These need to be handled specially when the map is rotated
+            if (mapContainer) {
+                mapContainer.addEventListener('mousedown', () => {
+                    // If map is rotated and user is interacting, temporarily simplify interactions
+                    if (state.autoRotateEnabled && Math.abs(state.worldRotation) > 0) {
+                        console.log('Map interaction while rotated');
+                    }
+                });
+            }
             
             // Auto-rotate toggle button
             btnAutoRotate.addEventListener('click', toggleAutoRotate);
