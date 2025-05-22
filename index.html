@@ -144,6 +144,9 @@
                     <div class="slider-label"><span>Selected Pointer Rotation:</span><span id="pointer-rotation-value">0°</span></div>
                     <input type="range" id="pointer-rotation-slider" min="-180" max="180" value="0" step="1">
                 </div>
+                <div class="control-row">
+                    <button id="btn-auto-rotate" class="primary">Auto-Rotate Map</button>
+                </div>
             </div>
         </div>
     </div>
@@ -208,6 +211,7 @@
             gpsAccuracyThreshold: 10.0, isGPSReady: false,
             savedCharts: [], currentViewingChart: null, pointerConeRotation: 0,
             worldRotation: 0, rotationCenter: null,
+            deviceHeading: 0, autoRotateEnabled: false,
             mapInstance: null, chartMapInstance: null, userLocationMarker: null,
             coneMarkersLayer: null, chartMarkersLayer: null,
         };
@@ -219,6 +223,7 @@
         // Mapping Screen Elements
         const locationInfo = document.getElementById('location-info'); const accuracyStatus = document.getElementById('accuracy-status'); const saveButton = document.getElementById('save-button'); const mapContainer = document.getElementById('map'); const selectedConeIndicator = document.getElementById('selected-cone-indicator'); const accuracyThresholdSlider = document.getElementById('accuracy-threshold-slider'); const accuracyThresholdValue = document.getElementById('accuracy-threshold-value'); const btnPointerCone = document.getElementById('btn-pointer-cone'); const btnSingleCone = document.getElementById('btn-single-cone'); const btnTagCone = document.getElementById('btn-tag-cone'); const btnDeleteLastCone = document.getElementById('btn-delete-last-cone'); const pointerRotationContainer = document.getElementById('pointer-rotation-container'); const pointerRotationSlider = document.getElementById('pointer-rotation-slider'); const pointerRotationValue = document.getElementById('pointer-rotation-value');
         const worldRotationSlider = document.getElementById('world-rotation-slider'); const rotationValue = document.getElementById('rotation-value');
+        const btnAutoRotate = document.getElementById('btn-auto-rotate');
         // Saved Charts Screen Elements
         const chartsContainer = document.getElementById('charts-container'); const noChartsMessage = document.getElementById('no-charts-message'); const chartsList = document.getElementById('charts-list'); const importChartButtonMain = document.getElementById('import-chart-button-main'); const importChartButtonSaved = document.getElementById('import-chart-button-saved'); const deleteAllChartsButton = document.getElementById('delete-all-charts-button');
         // Chart View Screen Elements
@@ -287,15 +292,138 @@
         function updateSelectedConeRotation(rotation) { /* ... same as before ... */ if (state.selectedConeIndex !== null && state.cones[state.selectedConeIndex]) { const cone = state.cones[state.selectedConeIndex]; if (cone.type === ConeType.POINTER) { cone.rotation = rotation; let displayRotation = rotation + state.worldRotation; if (cone.leafletMarker && typeof cone.leafletMarker.setRotationAngle === 'function') { cone.leafletMarker.setRotationAngle(displayRotation); } updateSaveButtonState(); } } }
         function updateSaveButtonState() { saveButton.disabled = state.cones.length === 0; }
 
-        // ==== Geolocation Functions ====
+        // ==== Geolocation and Device Orientation Functions ====
         // ... initGeolocation, stopGeolocation, handleLocationUpdate, handleLocationError, updateLocationStatus ...
         // ... remain the same ...
         let watchId = null; let isFirstLocationUpdate = true;
-        function initGeolocation() { if (!('geolocation' in navigator)) { updateLocationStatus("BAD", "NO GPS", "Geolocation not supported"); btnTagCone.disabled = true; return; } if (watchId !== null) navigator.geolocation.clearWatch(watchId); updateLocationStatus("WAIT", "Requesting GPS..."); if (state.userLocationMarker && state.mapInstance) { try { state.mapInstance.removeLayer(state.userLocationMarker); } catch(e){} state.userLocationMarker = null; } state.currentLocation = null; state.isGPSReady = false; btnTagCone.disabled = true; isFirstLocationUpdate = true; navigator.geolocation.getCurrentPosition(handleLocationUpdate, handleLocationError, { enableHighAccuracy: true, maximumAge: 60000, timeout: 10000 }); watchId = navigator.geolocation.watchPosition(handleLocationUpdate, handleLocationError, { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 }); }
-        function stopGeolocation() { if (watchId !== null && navigator.geolocation) { navigator.geolocation.clearWatch(watchId); watchId = null; updateLocationStatus("BAD", "OFF", "GPS Disabled"); if (state.userLocationMarker && state.mapInstance) { try { state.mapInstance.removeLayer(state.userLocationMarker); } catch(e){} state.userLocationMarker = null; } state.isGPSReady = false; btnTagCone.disabled = true; } }
+        let deviceOrientationId = null;
+        function initGeolocation() { if (!('geolocation' in navigator)) { updateLocationStatus("BAD", "NO GPS", "Geolocation not supported"); btnTagCone.disabled = true; return; } if (watchId !== null) navigator.geolocation.clearWatch(watchId); updateLocationStatus("WAIT", "Requesting GPS..."); if (state.userLocationMarker && state.mapInstance) { try { state.mapInstance.removeLayer(state.userLocationMarker); } catch(e){} state.userLocationMarker = null; } state.currentLocation = null; state.isGPSReady = false; btnTagCone.disabled = true; isFirstLocationUpdate = true; navigator.geolocation.getCurrentPosition(handleLocationUpdate, handleLocationError, { enableHighAccuracy: true, maximumAge: 60000, timeout: 10000 }); watchId = navigator.geolocation.watchPosition(handleLocationUpdate, handleLocationError, { enableHighAccuracy: true, maximumAge: 2000, timeout: 5000 }); 
+            // Initialize device orientation if we're on the mapping screen
+            if (state.currentScreen === 'mapping') {
+                initDeviceOrientation();
+            }
+        }
+        function stopGeolocation() { if (watchId !== null && navigator.geolocation) { navigator.geolocation.clearWatch(watchId); watchId = null; updateLocationStatus("BAD", "OFF", "GPS Disabled"); if (state.userLocationMarker && state.mapInstance) { try { state.mapInstance.removeLayer(state.userLocationMarker); } catch(e){} state.userLocationMarker = null; } state.isGPSReady = false; btnTagCone.disabled = true; } 
+            // Stop device orientation when we stop geolocation
+            stopDeviceOrientation();
+        }
         function handleLocationUpdate(position) { const lat = position.coords.latitude, lon = position.coords.longitude, accuracy = position.coords.accuracy; state.currentLocation = { latitude: lat, longitude: lon, accuracy: accuracy }; state.isGPSReady = accuracy <= state.gpsAccuracyThreshold; const statusText = `Lat:${lat.toFixed(6)}, Lon:${lon.toFixed(6)} | Acc:${accuracy.toFixed(1)}m`; updateLocationStatus(state.isGPSReady ? "GOOD" : "BAD", state.isGPSReady ? "OK" : "ACC POOR", statusText); btnTagCone.disabled = !state.isGPSReady; if (state.mapInstance && state.currentScreen === 'mapping') { const currentLatLng = L.latLng(lat, lon); if (isFirstLocationUpdate && state.isGPSReady) { console.log("First good GPS fix, centering map."); state.mapInstance.setView(currentLatLng, state.mapInstance.getZoom() || INITIAL_MAP_ZOOM); isFirstLocationUpdate = false; } if (!state.userLocationMarker) { state.userLocationMarker = L.layerGroup([ L.circle(currentLatLng, { radius: accuracy, color: 'blue', fillColor: '#30f', fillOpacity: 0.10, weight: 1, interactive: false }), L.circleMarker(currentLatLng, { radius: 4, color: 'white', fillColor: 'blue', fillOpacity: 1, weight: 1, interactive: false}) ]).addTo(state.mapInstance); } else { const layers = state.userLocationMarker.getLayers(); if (layers.length === 2) { layers[0].setLatLng(currentLatLng).setRadius(accuracy); layers[1].setLatLng(currentLatLng); } } } else if (!state.mapInstance && state.currentScreen === 'mapping' && state.isGPSReady) { initializeMapView([lat, lon]); } }
         function handleLocationError(error) { console.error('Geolocation Error:', error.code, error.message); let msg='GPS Error', lbl="ERROR"; switch(error.code) { case 1: msg="GPS Permission Denied"; lbl="DENIED"; break; case 2: msg="GPS Position Unavailable"; lbl="UNAVAIL"; break; case 3: msg="GPS Timeout"; lbl="TIMEOUT"; break; } updateLocationStatus("BAD", lbl, msg); state.currentLocation = null; state.isGPSReady = false; btnTagCone.disabled = true; if (state.userLocationMarker && state.mapInstance) { try { state.mapInstance.removeLayer(state.userLocationMarker); } catch(e){} state.userLocationMarker = null; } }
         function updateLocationStatus(type, label, info) { locationInfo.innerHTML = `${info} <span id="accuracy-status" class="status-pill status-${type.toLowerCase()}">${label}</span>`; }
+        
+        // ==== Device Orientation Functions ====
+        function initDeviceOrientation() {
+            if (deviceOrientationId) {
+                stopDeviceOrientation();
+            }
+            
+            // Check if DeviceOrientationEvent is available
+            if (window.DeviceOrientationEvent) {
+                console.log('Device orientation is supported');
+                
+                // Some browsers (like iOS) require permission for device orientation
+                if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    // iOS 13+ requires permission
+                    DeviceOrientationEvent.requestPermission()
+                        .then(permissionState => {
+                            if (permissionState === 'granted') {
+                                deviceOrientationId = window.addEventListener('deviceorientation', handleDeviceOrientation);
+                                console.log('Device orientation permission granted');
+                            } else {
+                                console.warn('Device orientation permission denied');
+                            }
+                        })
+                        .catch(console.error);
+                } else {
+                    // Non-iOS or older iOS versions
+                    deviceOrientationId = window.addEventListener('deviceorientation', handleDeviceOrientation);
+                }
+            } else {
+                console.warn('Device orientation not supported');
+            }
+        }
+        
+        function stopDeviceOrientation() {
+            if (deviceOrientationId && window.DeviceOrientationEvent) {
+                window.removeEventListener('deviceorientation', handleDeviceOrientation);
+                deviceOrientationId = null;
+                console.log('Device orientation listener removed');
+            }
+        }
+        
+        function handleDeviceOrientation(event) {
+            // Get the device heading (compass direction)
+            // alpha is the compass direction the device is facing in degrees
+            if (event.webkitCompassHeading) {
+                // iOS devices use webkitCompassHeading (measured clockwise from North)
+                state.deviceHeading = event.webkitCompassHeading;
+            } else if (event.alpha !== null) {
+                // Android devices use alpha (measured counter-clockwise from West)
+                // Convert to clockwise from North
+                state.deviceHeading = (360 - event.alpha) % 360;
+            }
+            
+            // Update the world rotation if auto-rotate is enabled
+            if (state.autoRotateEnabled && state.currentScreen === 'mapping') {
+                // Convert device heading to map rotation
+                // We negate the value because we want to rotate the map in the opposite direction
+                // to give the impression that we're facing "up" on the map
+                const mapRotation = -state.deviceHeading;
+                
+                // Only update if there's a significant change (to prevent constant small updates)
+                if (Math.abs(mapRotation - state.worldRotation) > 3) {
+                    state.worldRotation = mapRotation;
+                    
+                    // Update the rotation slider to match
+                    if (worldRotationSlider) {
+                        worldRotationSlider.value = mapRotation;
+                        rotationValue.textContent = `${Math.round(mapRotation)}°`;
+                    }
+                    
+                    // Apply rotation to all cones
+                    applyWorldRotation();
+                }
+            }
+        }
+        
+        function applyWorldRotation() {
+            if (!state.rotationCenter || !state.mapInstance) return;
+            
+            state.cones.forEach(cone => {
+                if (cone.leafletMarker) {
+                    let displayLatLng = L.latLng(cone.latitude, cone.longitude);
+                    let displayRotation = cone.rotation || 0;
+                    const centerLatLng = L.latLng(state.rotationCenter.lat, state.rotationCenter.lng);
+                    displayLatLng = rotateLatLngAroundCenter(state.mapInstance, displayLatLng, centerLatLng, state.worldRotation);
+                    
+                    if (cone.type === ConeType.POINTER) {
+                        displayRotation = (cone.rotation || 0) + state.worldRotation;
+                    }
+                    
+                    cone.leafletMarker.setLatLng(displayLatLng);
+                    if (typeof cone.leafletMarker.setRotationAngle === 'function') {
+                        cone.leafletMarker.setRotationAngle(displayRotation);
+                    }
+                }
+            });
+        }
+        
+        function toggleAutoRotate() {
+            state.autoRotateEnabled = !state.autoRotateEnabled;
+            
+            if (state.autoRotateEnabled) {
+                btnAutoRotate.textContent = 'Disable Auto-Rotate';
+                btnAutoRotate.classList.remove('primary');
+                btnAutoRotate.classList.add('active');
+                
+                // Make sure device orientation is initialized
+                initDeviceOrientation();
+            } else {
+                btnAutoRotate.textContent = 'Auto-Rotate Map';
+                btnAutoRotate.classList.remove('active');
+                btnAutoRotate.classList.add('primary');
+            }
+        }
 
         // ==== Storage Functions ====
         // ... saveCurrentChart, loadSavedCharts, deleteChart, deleteAllCharts, exportChart, importChartFromFile ...
@@ -319,7 +447,13 @@
              if (screens[screenId]) {
                  screens[screenId].classList.add('active'); state.currentScreen = screenId;
                  switch(screenId) {
-                     case 'mapping': state.cones = []; state.selectedConeIndex = null; deselectCone(); state.rotationCenter = null; state.worldRotation = 0; worldRotationSlider.value = 0; rotationValue.textContent = `0°`; const startCoords = state.currentLocation ? [state.currentLocation.latitude, state.currentLocation.longitude] : [0, 0]; initializeMapView(startCoords); updateSaveButtonState(); initGeolocation(); break;
+                     case 'mapping': state.cones = []; state.selectedConeIndex = null; deselectCone(); state.rotationCenter = null; state.worldRotation = 0; worldRotationSlider.value = 0; rotationValue.textContent = `0°`; const startCoords = state.currentLocation ? [state.currentLocation.latitude, state.currentLocation.longitude] : [0, 0]; initializeMapView(startCoords); updateSaveButtonState(); initGeolocation(); 
+                        // Reset auto-rotate button state
+                        state.autoRotateEnabled = false;
+                        btnAutoRotate.textContent = 'Auto-Rotate Map';
+                        btnAutoRotate.classList.remove('active');
+                        btnAutoRotate.classList.add('primary');
+                        break;
                      case 'savedCharts': if (state.mapInstance) { state.mapInstance.remove(); state.mapInstance = null; } if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; } updateChartsList(); break;
                      case 'chartView': if (!state.currentViewingChart) { navigateToScreen('savedCharts'); return; } let centerCoords = [0, 0]; const cones = state.currentViewingChart.coneData; if (cones.length > 0) centerCoords = [cones[0].latitude, cones[0].longitude]; initializeChartView(centerCoords, INITIAL_CHART_ZOOM, cones); break;
                      case 'mainMenu': state.currentViewingChart = null; state.cones = []; if (state.mapInstance) { state.mapInstance.remove(); state.mapInstance = null; } if (state.chartMapInstance) { state.chartMapInstance.remove(); state.chartMapInstance = null; } break;
@@ -335,7 +469,21 @@
             // -- Slider Inputs --
             accuracyThresholdSlider.addEventListener('input', () => { state.gpsAccuracyThreshold = parseFloat(accuracyThresholdSlider.value); accuracyThresholdValue.textContent = `${state.gpsAccuracyThreshold.toFixed(1)} m`; if (state.currentLocation) handleLocationUpdate({ coords: state.currentLocation }); });
             pointerRotationSlider.addEventListener('input', () => { const r = parseFloat(pointerRotationSlider.value); state.pointerConeRotation = r; pointerRotationValue.textContent = `${Math.round(r)}°`; updateSelectedConeRotation(r); });
-            worldRotationSlider.addEventListener('input', () => { if (state.currentScreen !== 'mapping' || !state.rotationCenter || !state.mapInstance) return; state.worldRotation = parseFloat(worldRotationSlider.value); rotationValue.textContent = `${Math.round(state.worldRotation)}°`; state.cones.forEach(cone => { if (cone.leafletMarker) { let displayLatLng = L.latLng(cone.latitude, cone.longitude); let displayRotation = cone.rotation || 0; const centerLatLng = L.latLng(state.rotationCenter.lat, state.rotationCenter.lng); displayLatLng = rotateLatLngAroundCenter(state.mapInstance, displayLatLng, centerLatLng, state.worldRotation); if (cone.type === ConeType.POINTER) displayRotation = (cone.rotation || 0) + state.worldRotation; cone.leafletMarker.setLatLng(displayLatLng); if (typeof cone.leafletMarker.setRotationAngle === 'function') { cone.leafletMarker.setRotationAngle(displayRotation); } } }); });
+            worldRotationSlider.addEventListener('input', () => { 
+                if (state.currentScreen !== 'mapping' || !state.rotationCenter || !state.mapInstance) return;
+                
+                // Disable auto-rotate when manually adjusting rotation
+                if (state.autoRotateEnabled) {
+                    toggleAutoRotate();
+                }
+                
+                state.worldRotation = parseFloat(worldRotationSlider.value); 
+                rotationValue.textContent = `${Math.round(state.worldRotation)}°`; 
+                applyWorldRotation();
+            });
+            
+            // Auto-rotate toggle button
+            btnAutoRotate.addEventListener('click', toggleAutoRotate);
             // -- Modal Actions --
             confirmSaveButton.addEventListener('click', () => { const name = chartNameInput.value.trim(); if (!name) { alert('Enter chart name.'); return; } loadSavedCharts(); const existing = state.savedCharts.find(c => c.name === name); if (existing && !confirm(`Overwrite chart "${name}"?`)) return; if (saveCurrentChart(name)) modal.style.display = 'none'; });
             cancelSaveButton.addEventListener('click', () => { modal.style.display = 'none'; });
