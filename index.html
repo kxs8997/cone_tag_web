@@ -228,6 +228,7 @@
             deviceHeading: 0, autoRotateEnabled: false,
             mapInstance: null, chartMapInstance: null, userLocationMarker: null,
             coneMarkersLayer: null, chartMarkersLayer: null,
+            mapTileLayer: null, chartTileLayer: null,
         };
 
         // ==== DOM Elements ====
@@ -283,6 +284,17 @@
                 zoomAnimation: false
             });
 
+            // Create tile layer (but don't add it initially)
+            state.mapTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+                maxZoom: 21, 
+                maxNativeZoom: 19, 
+                attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OSM</a>' 
+            });
+            
+            // Set default hidden state
+            toggleMapBgMappingButton.textContent = "Show Map";
+            mapContainer.classList.add('map-background-hidden');
+
             if (!state.coneMarkersLayer) state.coneMarkersLayer = L.layerGroup(); else state.coneMarkersLayer.clearLayers();
             state.coneMarkersLayer.addTo(state.mapInstance);
             state.mapInstance.on('click', deselectCone);
@@ -307,6 +319,17 @@
                 markerZoomAnimation: false,
                 zoomAnimation: false
              });
+
+             // Create chart tile layer (but don't add it initially)
+             state.chartTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+                maxZoom: 21, 
+                maxNativeZoom: 19, 
+                attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OSM</a>' 
+             });
+             
+             // Set default hidden state
+             toggleMapBgChartButton.textContent = "Show Map";
+             chartMapContainer.classList.add('map-background-hidden');
 
              if (!state.chartMarkersLayer) state.chartMarkersLayer = L.layerGroup(); else state.chartMarkersLayer.clearLayers();
              state.chartMarkersLayer.addTo(state.chartMapInstance);
@@ -532,14 +555,19 @@
         
         // ==== Map Background Toggle Function ====
         function toggleMapBackground() {
+            console.log("Toggle map background called");
             let mapInstance = null, tileLayer = null, button = null, container = null;
-            if (state.currentScreen === 'mapping' && state.mapInstance && state.mapTileLayer) { 
+            
+            // Determine which map/button/container to use based on current screen
+            if (state.currentScreen === 'mapping') { 
+                console.log("Toggling map background for mapping screen");
                 mapInstance = state.mapInstance; 
                 tileLayer = state.mapTileLayer; 
                 button = toggleMapBgMappingButton; 
                 container = mapContainer; 
             }
-            else if (state.currentScreen === 'chartView' && state.chartMapInstance && state.chartTileLayer) { 
+            else if (state.currentScreen === 'chartView') { 
+                console.log("Toggling map background for chart view screen");
                 mapInstance = state.chartMapInstance; 
                 tileLayer = state.chartTileLayer; 
                 button = toggleMapBgChartButton; 
@@ -548,6 +576,12 @@
             else { 
                 console.warn("Cannot toggle map background: No active/valid map."); 
                 return; 
+            }
+
+            if (!mapInstance || !tileLayer) {
+                console.error("Cannot toggle map: Map instance or tile layer missing", 
+                    { mapInstance: !!mapInstance, tileLayer: !!tileLayer });
+                return;
             }
 
             if (mapInstance.hasLayer(tileLayer)) { // Hide
